@@ -1,0 +1,25 @@
+# Backend
+./backend/venv/
+./backend/__pycache__/
+./backend/*.pyc
+./backend/.pytest_cache/
+./backend/logs/
+./backend/data/uploads/
+./backend/.env
+
+# Frontend  
+./frontend/node_modules/
+./frontend/dist/
+./frontend/.env
+./frontend/.env.local
+
+# Общие
+dist
+*.log
+.git/
+.gitignore
+README.md
+*.md
+.DS_Store
+Thumbs.db
+.env

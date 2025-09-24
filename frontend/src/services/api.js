@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://localhost:8000/admin/api'
+const API_BASE_URL = '/admin/api'
 
 class ApiService {
   constructor() {

@@ -1,3 +1,8 @@
+node_modules/
+__pycache__/
+.venv
+*.pyc
+
 # Logs
 frontend/logs
 frontend/*.log
@@ -29,9 +34,14 @@ backend/logs
 backend/.env
 backend/.venv
 backend/__pycache__
+backend/*.pyc
 
+.env
 
 #Mac OS
 .DS_Store
 .AppleDouble
 .LSOverride
+
+# Visual Studio Code
+.vscode
