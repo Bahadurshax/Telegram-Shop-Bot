@@ -10,6 +10,7 @@ from aiogram.types import InlineKeyboardButton
 
 from ..states.user_states import OrderStates
 from ..keyboards.inline import get_main_menu_keyboard
+from ..utils.telegram import edit_message_text_or_caption
 from ..utils.messages import (
     ORDER_CONTACT_NAME,
     ORDER_CONTACT_PHONE,
@@ -36,9 +37,10 @@ async def start_checkout(callback: CallbackQuery, state: FSMContext):
     user = await user_service.get_user(callback.from_user.id)
     
     if not user or not user.cart:
-        await callback.message.edit_text(
+        await edit_message_text_or_caption(
+            callback.message,
             CART_EMPTY,
-            reply_markup=get_main_menu_keyboard()
+            reply_markup=get_main_menu_keyboard(),
         )
         await callback.answer()
         return
@@ -48,7 +50,7 @@ async def start_checkout(callback: CallbackQuery, state: FSMContext):
     
     await callback.message.edit_text(
         ORDER_CONTACT_NAME,
-        reply_markup=None
+        reply_markup=None,
     )
     await callback.answer()
 
@@ -170,7 +172,11 @@ async def show_order_confirmation(update, state: FSMContext):
     
     if not user or not user.cart:
         if hasattr(update, 'message'):
-            await update.message.edit_text("❌ Корзина пуста", reply_markup=get_main_menu_keyboard())
+            await edit_message_text_or_caption(
+                update.message,
+                "❌ Корзина пуста",
+                reply_markup=get_main_menu_keyboard(),
+            )
         else:
             await update.answer("❌ Корзина пуста", reply_markup=get_main_menu_keyboard())
         await state.clear()
@@ -217,9 +223,10 @@ async def show_order_confirmation(update, state: FSMContext):
     await state.set_state(OrderStates.confirmation)
     
     if hasattr(update, 'message') and hasattr(update.message, 'edit_text'):
-        await update.message.edit_text(
+        await edit_message_text_or_caption(
+            update.message,
             confirmation_text,
-            reply_markup=confirmation_keyboard.as_markup()
+            reply_markup=confirmation_keyboard.as_markup(),
         )
     else:
         await update.answer(
@@ -245,9 +252,10 @@ async def confirm_order(callback: CallbackQuery, state: FSMContext):
         )
         
         if not order:
-            await callback.message.edit_text(
+            await edit_message_text_or_caption(
+                callback.message,
                 "❌ Не удалось создать заказ. Корзина пуста или товары недоступны.",
-                reply_markup=get_main_menu_keyboard()
+                reply_markup=get_main_menu_keyboard(),
             )
             await callback.answer()
             await state.clear()
@@ -262,16 +270,17 @@ async def confirm_order(callback: CallbackQuery, state: FSMContext):
         
         await callback.message.edit_text(
             success_text,
-            reply_markup=get_main_menu_keyboard()
+            reply_markup=get_main_menu_keyboard(),
         )
         
         await callback.answer("🎉 Заказ успешно оформлен!")
         
     except Exception as e:
         print(f"Ошибка создания заказа: {e}")
-        await callback.message.edit_text(
+        await edit_message_text_or_caption(
+            callback.message,
             "❌ Произошла ошибка при оформлении заказа. Попробуйте позже.",
-            reply_markup=get_main_menu_keyboard()
+            reply_markup=get_main_menu_keyboard(),
         )
         await callback.answer()
     
@@ -283,9 +292,10 @@ async def cancel_order(callback: CallbackQuery, state: FSMContext):
     """Отменить заказ"""
     await state.clear()
     
-    await callback.message.edit_text(
+    await edit_message_text_or_caption(
+        callback.message,
         "❌ Оформление заказа отменено. Товары остались в корзине.",
-        reply_markup=get_main_menu_keyboard()
+        reply_markup=get_main_menu_keyboard(),
     )
     await callback.answer()
 

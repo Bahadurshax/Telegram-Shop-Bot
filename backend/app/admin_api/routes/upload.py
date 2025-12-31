@@ -4,13 +4,16 @@ API для загрузки файлов и парсинга прайс-лист
 import io
 import os
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
-import pandas as pd
+
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
+from openpyxl import load_workbook
 
 from ..auth import verify_admin_token
 from ...services.product_service import ProductService
 from ...models.product import ProductCreate
 from ...config import settings
+from ..utils.excel_parser import ExcelParser
+from ...services.image_service import ImageKitService
 
 router = APIRouter()
 
@@ -18,289 +21,250 @@ router = APIRouter()
 @router.post("/upload/pricelist")
 async def upload_pricelist(
     file: UploadFile = File(...),
-    admin: str = Depends(verify_admin_token)
+    sheet_name: str | None = Form(
+        None, description="Название листа для парсинга (один лист)"
+    ),
+    sheet_index: int = Form(0, description="Индекс листа (0 - первый)"),
+    sheet_names: List[str] | None = Form(
+        None, description="Список названий листов для парсинга"
+    ),
+    skip_duplicates: bool = Form(True, description="Пропускать дубликаты"),
+    admin: str = Depends(verify_admin_token),
 ):
-    """Загрузить и обработать прайс-лист"""
+    """
+    Загрузить и обработать прайс-лист Excel
+    
+    - Извлекает изображения из ячеек
+    - Парсит данные товаров
+    - Создает товары в базе данных
+    """
     
     if not file.filename:
         raise HTTPException(status_code=400, detail="Файл не выбран")
     
     # Проверяем тип файла
-    if not file.filename.lower().endswith(('.xlsx', '.xls', '.csv')):
+    if not file.filename.lower().endswith('.xlsx'):
         raise HTTPException(
             status_code=400, 
-            detail="Поддерживаются только файлы Excel (.xlsx, .xls) и CSV"
+            detail="Поддерживаются только файлы Excel (.xlsx)"
         )
     
     try:
         # Читаем файл
         content = await file.read()
         
-        if file.filename.lower().endswith('.csv'):
-            df = pd.read_csv(io.StringIO(content.decode('utf-8')))
-        else:
-            df = pd.read_excel(io.BytesIO(content))
-        
-        # Ожидаемые столбцы (по порядку)
-        expected_columns = [
-            'name',           # Наименование товара
-            'image',          # Фото товара (ссылка или путь)
-            'description',    # Характеристика товара
-            'price_uzs',      # Цена в сумах
-            'price_usd',      # Цена в долларах
-            'usd_rate'        # Курс доллара
-        ]
-        
-        # Если количество столбцов не совпадает, пытаемся угадать по названиям
-        if len(df.columns) >= 6:
-            # Используем первые 6 столбцов
-            df = df.iloc[:, :6]
-            df.columns = expected_columns
-        else:
-            # Пытаемся найти столбцы по названиям
-            column_mapping = {}
-            for col in df.columns:
-                col_lower = str(col).lower()
-                if any(word in col_lower for word in ['название', 'наименование', 'товар', 'name']):
-                    column_mapping['name'] = col
-                elif any(word in col_lower for word in ['фото', 'изображение', 'картинка', 'image']):
-                    column_mapping['image'] = col
-                elif any(word in col_lower for word in ['описание', 'характеристика', 'description']):
-                    column_mapping['description'] = col
-                elif any(word in col_lower for word in ['сум', 'uzs', 'цена']):
-                    if 'price_uzs' not in column_mapping:
-                        column_mapping['price_uzs'] = col
-                elif any(word in col_lower for word in ['доллар', 'usd',
-                ]):
-                    column_mapping['price_usd'] = col
-                elif any(word in col_lower for word in ['курс', 'rate']):
-                    column_mapping['usd_rate'] = col
-            
-            # Проверяем, что нашли основные столбцы
-            required_cols = ['name', 'price_uzs']
-            missing_cols = [col for col in required_cols if col not in column_mapping]
-            if missing_cols:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Не найдены обязательные столбцы: {', '.join(missing_cols)}"
-                )
-            
-            # Переименовываем столбцы
-            df = df.rename(columns=column_mapping)
-        
-        # Очищаем и валидируем данные
-        processed_products = []
-        errors = []
-        
-        for index, row in df.iterrows():
-            try:
-                # Пропускаем пустые строки
-                if pd.isna(row.get('name')) or str(row.get('name')).strip() == '':
-                    continue
-                
-                # Базовые данные
-                product_data = {
-                    'name': str(row['name']).strip(),
-                    'description': str(row.get('description', '')).strip(),
-                    'category': 'general'  # По умолчанию
-                }
-                
-                # Цены
-                try:
-                    product_data['price_uzs'] = float(row.get('price_uzs', 0))
-                except (ValueError, TypeError):
-                    product_data['price_uzs'] = 0
-                
-                try:
-                    product_data['price_usd'] = float(row.get('price_usd', 0))
-                except (ValueError, TypeError):
-                    product_data['price_usd'] = 0
-                
-                try:
-                    product_data['usd_rate'] = float(row.get('usd_rate', 11000))
-                except (ValueError, TypeError):
-                    product_data['usd_rate'] = 11000
-                
-                # Если нет цены в долларах, рассчитываем
-                if product_data['price_usd'] == 0 and product_data['price_uzs'] > 0:
-                    product_data['price_usd'] = product_data['price_uzs'] / product_data['usd_rate']
-                
-                # Если нет цены в сумах, рассчитываем
-                if product_data['price_uzs'] == 0 and product_data['price_usd'] > 0:
-                    product_data['price_uzs'] = product_data['price_usd'] * product_data['usd_rate']
-                
-                # Автоматическое определение категории по названию
-                name_lower = product_data['name'].lower()
-                if any(word in name_lower for word in ['ip', 'сетевая', 'network']):
-                    product_data['category'] = 'ip_cameras'
-                elif any(word in name_lower for word in ['ahd', 'hdcvi', 'аналог', 'analog']):
-                    product_data['category'] = 'analog'
-                elif any(word in name_lower for word in ['dvr', 'nvr', 'регистратор', 'recorder']):
-                    product_data['category'] = 'dvr'
-                elif any(word in name_lower for word in ['блок', 'кабель', 'крепление', 'диск', 'коммутатор', 'hdd']):
-                    product_data['category'] = 'accessories'
-                elif 'камера' in name_lower:
-                    # Если просто "камера" без уточнения, считаем аналоговой
-                    product_data['category'] = 'analog'
-                
-                # Проверяем минимальные требования
-                if product_data['price_uzs'] <= 0 and product_data['price_usd'] <= 0:
-                    errors.append(f"Строка {index + 2}: Не указана цена товара")
-                    continue
-                
-                if len(product_data['name']) < 3:
-                    errors.append(f"Строка {index + 2}: Слишком короткое название товара")
-                    continue
-                
-                processed_products.append(product_data)
-                
-            except Exception as e:
-                errors.append(f"Строка {index + 2}: {str(e)}")
-        
-        if not processed_products:
+        if len(content) > settings.MAX_FILE_SIZE:
             raise HTTPException(
                 status_code=400,
-                detail="Не найдено валидных товаров для импорта"
+                detail=f"Файл слишком большой (макс. {settings.MAX_FILE_SIZE // (1024*1024)}МБ)"
             )
+        
+        # Очищаем старые временные файлы
+        temp_dir = os.path.join(settings.UPLOAD_DIR, "temp_processed_images")
+        cleaned_files = ImageKitService.cleanup_temp_folder(temp_dir, max_age_hours=1)
+        if cleaned_files > 0:
+            print(f"Очищено {cleaned_files} старых временных файлов")
+
+        # Создаем парсер
+        parser = ExcelParser(content, settings.UPLOAD_DIR)
+
+        # Парсим файл (один или несколько листов)
+        parse_result = parser.parse(
+            sheet_name=sheet_name,
+            sheet_index=sheet_index,
+            sheet_names=sheet_names,
+            skip_duplicates=skip_duplicates,
+        )
+        
+        if not parse_result["success"]:
+            raise HTTPException(
+                status_code=400,
+                detail=parse_result.get("error", "Ошибка парсинга")
+            )
+        
+        products_data = parse_result["products"]
+        stats = parse_result["stats"]
+        errors = parse_result["errors"]
+
+        print(f"[DEBUG] Результат парсинга:")
+        print(f"[DEBUG] - Количество товаров: {len(products_data)}")
+        print(f"[DEBUG] - Статистика: {stats}")
+        print(f"[DEBUG] - Ошибки: {errors}")
         
         # Сохраняем товары в базу
         product_service = ProductService()
         created_count = 0
-        updated_count = 0
+        save_errors = []
         
-        for product_data in processed_products:
+        for product_data in products_data:
             try:
-                # Проверяем, есть ли уже товар с таким названием
-                existing_products = await product_service.search_products(product_data['name'], limit=1)
-                
-                if existing_products and existing_products[0].name.lower() == product_data['name'].lower():
-                    # Обновляем существующий товар
-                    from ...models.product import ProductUpdate
-                    product_update = ProductUpdate(**{
-                        k: v for k, v in product_data.items() 
-                        if k != 'name'  # Название не обновляем
-                    })
-                    await product_service.update_product(existing_products[0].id, product_update)
-                    updated_count += 1
-                else:
-                    # Создаем новый товар
-                    product_create = ProductCreate(**product_data)
-                    await product_service.create_product(product_create)
-                    created_count += 1
-                    
+                # Создаем товар (image_url уже установлен парсером если найдено изображение)
+                product_create = ProductCreate(**product_data)
+                created_product = await product_service.create_product(product_create)
+
+                created_count += 1
+
             except Exception as e:
-                errors.append(f"Ошибка сохранения товара '{product_data['name']}': {str(e)}")
+                error_msg = f"Ошибка сохранения '{product_data.get('name', 'Unknown')}': {str(e)}"
+                save_errors.append(error_msg)
         
         return {
             "success": True,
             "message": f"Прайс-лист обработан успешно",
+            "sheet_name": parse_result.get("sheet_name"),
+            "sheet_names": parse_result.get("sheet_names"),
             "stats": {
-                "total_rows": len(df),
-                "processed": len(processed_products),
+                **stats,
                 "created": created_count,
-                "updated": updated_count,
-                "errors_count": len(errors)
+                "save_errors": len(save_errors)
             },
-            "errors": errors[:20] if errors else []  # Показываем до 20 ошибок
+            "errors": errors + save_errors[:10]  # Показываем до 10 ошибок
         }
         
-    except pd.errors.EmptyDataError:
-        raise HTTPException(status_code=400, detail="Файл пуст или поврежден")
-    except pd.errors.ParserError:
-        raise HTTPException(status_code=400, detail="Ошибка парсинга файла. Проверьте формат данных")
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Ошибка обработки файла: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Ошибка обработки файла: {str(e)}"
+        )
 
 
-@router.post("/upload/images")
-async def upload_product_images(
-    files: List[UploadFile] = File(...),
-    admin: str = Depends(verify_admin_token)
+@router.post("/upload/pricelist/sheets")
+async def get_pricelist_sheets(
+    file: UploadFile = File(...),
+    admin: str = Depends(verify_admin_token),
 ):
-    """Загрузить изображения товаров"""
-    
-    if not files or len(files) == 0:
-        raise HTTPException(status_code=400, detail="Файлы не выбраны")
-    
-    # Проверяем количество файлов
-    if len(files) > 50:
-        raise HTTPException(status_code=400, detail="Максимум 50 файлов за раз")
-    
-    uploaded_files = []
-    errors = []
-    
-    # Создаем директорию для изображений
-    upload_dir = os.path.join(settings.UPLOAD_DIR, "images")
-    os.makedirs(upload_dir, exist_ok=True)
-    
-    for file in files:
-        try:
-            # Проверяем тип файла
-            if not file.filename.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp')):
-                errors.append(f"{file.filename}: Неподдерживаемый формат изображения")
-                continue
-            
-            # Проверяем размер файла
-            content = await file.read()
-            if len(content) > settings.MAX_FILE_SIZE:
-                errors.append(f"{file.filename}: Файл слишком большой (макс. {settings.MAX_FILE_SIZE // (1024*1024)}МБ)")
-                continue
-            
-            # Генерируем уникальное имя файла
-            import uuid
-            from pathlib import Path
-            
-            file_extension = Path(file.filename).suffix.lower()
-            unique_filename = f"{uuid.uuid4()}{file_extension}"
-            file_path = os.path.join(upload_dir, unique_filename)
-            
-            # Сохраняем файл
-            with open(file_path, "wb") as buffer:
-                buffer.write(content)
-            
-            uploaded_files.append({
-                "original_name": file.filename,
-                "filename": unique_filename,
-                "url": f"/admin/api/upload/images/{unique_filename}",
-                "size": len(content)
-            })
-            
-        except Exception as e:
-            errors.append(f"{file.filename}: Ошибка загрузки - {str(e)}")
-    
-    return {
-        "success": True,
-        "message": f"Загружено {len(uploaded_files)} файлов",
-        "uploaded_files": uploaded_files,
-        "errors": errors
-    }
+    """
+    Вернуть список листов Excel-файла прайс-листа.
+    Используется фронтендом перед импортом для выбора нужных листов.
+    """
+
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Файл не выбран")
+
+    if not file.filename.lower().endswith(".xlsx"):
+        raise HTTPException(
+            status_code=400,
+            detail="Поддерживаются только файлы Excel (.xlsx)",
+        )
+
+    try:
+        content = await file.read()
+
+        if len(content) > settings.MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Файл слишком большой "
+                    f"(макс. {settings.MAX_FILE_SIZE // (1024*1024)}МБ)"
+                ),
+            )
+
+        workbook = load_workbook(io.BytesIO(content), read_only=True, data_only=False)
+        return {"sheets": list(workbook.sheetnames)}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Ошибка чтения файла Excel: {str(e)}",
+        )
 
 
-@router.get("/upload/images/{filename}")
-async def get_product_image(filename: str):
-    """Получить изображение товара"""
+@router.get("/upload/template")
+async def download_template(admin: str = Depends(verify_admin_token)):
+    """Скачать шаблон прайс-листа Excel"""
+    
     from fastapi.responses import FileResponse
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment
     
-    image_path = os.path.join(settings.UPLOAD_DIR, "images", filename)
+    # Создаем новую книгу
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Товары"
     
-    if not os.path.exists(image_path):
-        raise HTTPException(status_code=404, detail="Изображение не найдено")
+    # Заголовки
+    headers = [
+        "Название товара",
+        "Фото",
+        "Описание/Характеристики",
+        "Цена (сум)",
+        "Цена ($)",
+        "Курс ($)"
+    ]
     
-    return FileResponse(image_path)
-
-
-@router.get("/upload/download/{filename}")
-async def download_file(filename: str, admin: str = Depends(verify_admin_token)):
-    """Скачать файл"""
-    from fastapi.responses import FileResponse
+    # Стилизуем заголовки
+    header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+    header_font = Font(color="FFFFFF", bold=True)
     
-    file_path = os.path.join(settings.UPLOAD_DIR, filename)
+    for col_num, header in enumerate(headers, 1):
+        cell = ws.cell(1, col_num, header)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center", vertical="center")
     
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="Файл не найден")
+    # Примеры данных
+    example_data = [
+        ["IP камера Hikvision DS-2CD1043G0-I 4MP", "", "4Мп IP камера, ИК подсветка до 30м, объектив 2.8мм", 850000, 75, 11333],
+        ["Аналоговая камера Dahua HAC-HFW1200TP 2MP", "", "2Мп HDCVI камера, ИК подсветка до 40м", 380000, 33, 11515],
+        ["DVR Hikvision DS-7104HGHI-F1 4-канальный", "", "4-канальный видеорегистратор, 1080p", 1200000, 105, 11429]
+    ]
+    
+    for row_num, row_data in enumerate(example_data, 2):
+        for col_num, value in enumerate(row_data, 1):
+            ws.cell(row_num, col_num, value)
+    
+    # Настройка ширины столбцов
+    ws.column_dimensions['A'].width = 40
+    ws.column_dimensions['B'].width = 15
+    ws.column_dimensions['C'].width = 50
+    ws.column_dimensions['D'].width = 15
+    ws.column_dimensions['E'].width = 12
+    ws.column_dimensions['F'].width = 12
+    
+    # Инструкции на отдельном листе
+    ws_instructions = wb.create_sheet("Инструкция")
+    
+    instructions = [
+        ["Инструкция по заполнению прайс-листа"],
+        [""],
+        ["1. Столбец 'Название товара' - обязательное поле"],
+        ["2. Столбец 'Фото' - вставьте изображение в ячейку (Вставка -> Рисунок)"],
+        ["3. Столбец 'Описание' - характеристики товара"],
+        ["4. Столбец 'Цена (сум)' - цена в узбекских сумах"],
+        ["5. Столбец 'Цена ($)' - цена в долларах (опционально)"],
+        ["6. Столбец 'Курс ($)' - текущий курс доллара"],
+        [""],
+        ["Категории определяются автоматически:"],
+        ["• IP камеры - содержат: 'IP', 'сетевая', 'PoE'"],
+        ["• Аналоговые - содержат: 'AHD', 'HDCVI', 'аналог'"],
+        ["• Регистраторы - содержат: 'DVR', 'NVR', 'регистратор'"],
+        ["• Аксессуары - содержат: 'блок', 'кабель', 'крепление'"],
+        [""],
+        ["Советы:"],
+        ["• Изображения встраиваются прямо в ячейки Excel"],
+        ["• Пустые строки будут пропущены"],
+        ["• Дубликаты (одинаковые названия) пропускаются"],
+        ["• Цены автоматически пересчитываются если указана одна валюта"]
+    ]
+    
+    for row_num, instruction in enumerate(instructions, 1):
+        ws_instructions.cell(row_num, 1, instruction[0])
+        if row_num == 1:
+            ws_instructions.cell(row_num, 1).font = Font(bold=True, size=14)
+    
+    ws_instructions.column_dimensions['A'].width = 80
+    
+    # Сохраняем файл
+    temp_file = os.path.join(settings.UPLOAD_DIR, "template_pricelist.xlsx")
+    wb.save(temp_file)
     
     return FileResponse(
-        file_path,
-        filename=filename,
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
+        temp_file,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        filename="template_pricelist.xlsx"
     )
+

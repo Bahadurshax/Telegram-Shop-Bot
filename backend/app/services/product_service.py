@@ -78,3 +78,7 @@ class ProductService:
     ) -> List[Product]:
         """Поиск товаров"""
         return await self.collection.search_products(query, skip, limit)
+
+    async def create_products_bulk(self, products_data: List[ProductCreate]) -> List[Product]:
+        """Массовое создание товаров"""
+        return await self.collection.create_products_bulk(products_data)

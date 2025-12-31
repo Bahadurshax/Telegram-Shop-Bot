@@ -54,8 +54,17 @@ def get_catalog_keyboard(has_products: bool = True) -> InlineKeyboardMarkup:
     return keyboard.as_markup()
 
 
-def get_product_keyboard(product_id: str, in_cart: bool = False) -> InlineKeyboardMarkup:
-    """Клавиатура товара"""
+def get_product_keyboard(
+    product_id: str,
+    in_cart: bool = False,
+    category: str = "all",
+    page: int = 1,
+) -> InlineKeyboardMarkup:
+    """Клавиатура товара
+
+    category и page нужны, чтобы по кнопке «Назад» вернуться
+    ровно к предыдущему списку товаров (через products_{category}_page_{page}).
+    """
     keyboard = InlineKeyboardBuilder()
     
     if not in_cart:
@@ -69,8 +78,11 @@ def get_product_keyboard(product_id: str, in_cart: bool = False) -> InlineKeyboa
         )
     
     keyboard.row(
-        InlineKeyboardButton(text=BUTTON_BACK, callback_data="catalog"),
-        InlineKeyboardButton(text=BUTTON_CART, callback_data="cart")
+        InlineKeyboardButton(
+            text=BUTTON_BACK,
+            callback_data=f"products_{category}_page_{page}",
+        ),
+        InlineKeyboardButton(text=BUTTON_CART, callback_data="cart"),
     )
     
     return keyboard.as_markup()

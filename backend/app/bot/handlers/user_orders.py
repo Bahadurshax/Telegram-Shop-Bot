@@ -8,6 +8,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.types import InlineKeyboardButton
 
 from ..keyboards.inline import get_main_menu_keyboard
+from ..utils.telegram import edit_message_text_or_caption
 from ...services.order_service import OrderService
 
 router = Router()
@@ -76,7 +77,7 @@ async def show_user_orders(user_id: int, update):
         keyboard = keyboard.as_markup()
 
     if isinstance(update, CallbackQuery):
-        await update.message.edit_text(text, reply_markup=keyboard)
+        await edit_message_text_or_caption(update.message, text, reply_markup=keyboard)
         await update.answer()
     else:
         await update.answer(text, reply_markup=keyboard)
@@ -138,9 +139,10 @@ async def show_order_details(callback: CallbackQuery):
         InlineKeyboardButton(text="🏠 Меню", callback_data="main_menu")
     )
     
-    await callback.message.edit_text(
+    await edit_message_text_or_caption(
+        callback.message,
         text,
-        reply_markup=keyboard.as_markup()
+        reply_markup=keyboard.as_markup(),
     )
 
 def register_user_order_handlers(dp: Dispatcher):

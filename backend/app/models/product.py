@@ -10,7 +10,7 @@ class Product(BaseModel):
   price_uzs: float = Field(..., description="Цена в сумах")
   price_usd: float = Field(..., description="Цена в долларах")
   usd_rate: float = Field(..., description="Курс доллара")
-  image_id: Optional[str] = Field(None, description="ID изображения в GridFS")
+  image_url: Optional[str] = Field(None, description="Публичный URL изображения в Supabase Storage")
   category: str = Field(default="general", description="Категория товара")
   is_active: bool = Field(default=True, description="Активность товара")
   created_at: datetime = Field(default_factory=datetime.now)
@@ -41,6 +41,7 @@ class ProductCreate(BaseModel):
   usd_rate: float
   category: str = "general"
   is_active: bool = True
+  image_url: Optional[str] = None
 
 
 class ProductUpdate(BaseModel):

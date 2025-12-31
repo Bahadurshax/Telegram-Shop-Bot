@@ -13,6 +13,7 @@ from .routes.products import router as products_router
 from .routes.orders import router as orders_router
 from .routes.upload import router as upload_router
 from .routes.dashboard import router as dashboard_router
+from .routes.public_products import router as public_products_router
 from ..database import db
 
 def create_admin_app() -> FastAPI:
@@ -57,6 +58,9 @@ def create_admin_app() -> FastAPI:
     app.include_router(orders_router, prefix="/admin/api", tags=["orders"])
     app.include_router(upload_router, prefix="/admin/api", tags=["upload"])
     app.include_router(dashboard_router, prefix="/admin/api", tags=["dashboard"])
+
+    # Публичные роуты для веб-приложения
+    app.include_router(public_products_router, prefix="/api", tags=["public"])
     
     # Аутентификация
     @app.post("/admin/api/auth/login")

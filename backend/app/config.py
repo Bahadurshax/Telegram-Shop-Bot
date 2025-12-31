@@ -39,6 +39,15 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = "data/uploads"
     LOGS_DIR: str = "logs"
     
+    # Supabase Storage (for product images)
+    # URL проекта (как в Dashboard, без /storage/v1)
+    SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
+    # На фронтенде можно использовать ANON KEY, но бэкенд для загрузки файлов
+    # должен использовать SERVICE ROLE KEY, чтобы обходить RLS.
+    SUPABASE_ANON_KEY: str = os.getenv("SUPABASE_ANON_KEY", "")
+    SUPABASE_SERVICE_ROLE_KEY: str = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
+    SUPABASE_BUCKET: str = os.getenv("SUPABASE_BUCKET", "product-images")
+    
     class Config:
         env_file = ".env"
         case_sensitive = True

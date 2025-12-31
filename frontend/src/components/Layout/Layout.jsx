@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 
 const Layout = ({ children, onLogout }) => {
@@ -9,6 +9,7 @@ const Layout = ({ children, onLogout }) => {
     { name: 'Дашборд', href: '/dashboard', icon: '📊' },
     { name: 'Товары', href: '/products', icon: '📦' },
     { name: 'Заказы', href: '/orders', icon: '🛒' },
+    { name: 'Загрузка прайса', href: '/upload', icon: '📤' },
   ]
 
   const isCurrentPage = (href) => location.pathname === href

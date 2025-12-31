@@ -119,6 +119,90 @@ class ApiService {
   async getOrdersStats() {
     return this.request('/orders/stats/summary')
   }
+
+  // Upload
+  async uploadImages(files) {
+    const formData = new FormData()
+
+    // Добавляем файлы в FormData
+    for (let i = 0; i < files.length; i++) {
+      formData.append('files', files[i])
+    }
+
+    const token = localStorage.getItem('admin_token')
+
+    return fetch(`${this.baseURL}/upload/images`, {
+      method: 'POST',
+      headers: {
+        ...(token && { 'Authorization': `Bearer ${token}` })
+      },
+      body: formData
+    }).then(response => {
+      if (!response.ok) {
+        if (response.status === 401) {
+          localStorage.removeItem('admin_token')
+          window.location.reload()
+        }
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      return response.json()
+    })
+  }
+
+  async uploadPricelist(file, sheetNames = [], skipDuplicates = true) {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('skip_duplicates', skipDuplicates ? 'true' : 'false')
+
+    if (Array.isArray(sheetNames)) {
+      sheetNames.forEach((name) => {
+        formData.append('sheet_names', name)
+      })
+    }
+
+    const token = localStorage.getItem('admin_token')
+
+    return fetch(`${this.baseURL}/upload/pricelist`, {
+      method: 'POST',
+      headers: {
+        ...(token && { Authorization: `Bearer ${token}` })
+      },
+      body: formData
+    }).then(response => {
+      if (!response.ok) {
+        if (response.status === 401) {
+          localStorage.removeItem('admin_token')
+          window.location.reload()
+        }
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      return response.json()
+    })
+  }
+
+  async getAvailableSheets(file) {
+    const formData = new FormData()
+    formData.append('file', file)
+
+    const token = localStorage.getItem('admin_token')
+
+    return fetch(`${this.baseURL}/upload/pricelist/sheets`, {
+      method: 'POST',
+      headers: {
+        ...(token && { Authorization: `Bearer ${token}` })
+      },
+      body: formData
+    }).then(response => {
+      if (!response.ok) {
+        if (response.status === 401) {
+          localStorage.removeItem('admin_token')
+          window.location.reload()
+        }
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      return response.json()
+    })
+  }
 }
 
 export const apiService = new ApiService()

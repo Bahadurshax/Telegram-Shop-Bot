@@ -13,13 +13,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements.txt first (better caching)
-COPY requirements.txt .
+# Install uv
+RUN pip install --no-cache-dir uv
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy dependency files first for better caching
+COPY pyproject.toml uv.lock ./
 
-# Copy the whole backend project
+# Install dependencies from lockfile
+RUN uv sync --frozen --no-dev
+
+# Copy application code
 COPY . .
 
 # Expose FastAPI default port

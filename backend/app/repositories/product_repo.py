@@ -101,5 +101,33 @@ class ProductRepository:
     async for product_data in cursor:
       product_data["_id"] = str(product_data["_id"])
       products.append(Product(**product_data))
-    
+
     return products
+
+  async def create_products_bulk(self, products_data: List[ProductCreate]) -> List[Product]:
+    """Массовое создание товаров"""
+    if not products_data:
+      return []
+
+    try:
+      products_dict = []
+      now = datetime.now(timezone.utc)
+
+      for product_data in products_data:
+        product_dict = product_data.model_dump()
+        product_dict["created_at"] = now
+        product_dict["updated_at"] = now
+        products_dict.append(product_dict)
+
+      result = await self.collection.insert_many(products_dict)
+
+      created_products = []
+      for i, inserted_id in enumerate(result.inserted_ids):
+        products_dict[i]["_id"] = str(inserted_id)
+        created_products.append(Product(**products_dict[i]))
+
+      return created_products
+
+    except Exception as e:
+      print(f"[ERROR] Ошибка массового создания товаров: {str(e)}")
+      raise

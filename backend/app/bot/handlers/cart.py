@@ -6,6 +6,7 @@ from aiogram.types import CallbackQuery
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from ..keyboards.inline import get_cart_keyboard, get_main_menu_keyboard
+from ..utils.telegram import edit_message_text_or_caption
 from ..utils.messages import CART_EMPTY, CART_TEMPLATE, CART_ITEM_TEMPLATE
 from ...services.user_service import UserService
 from ...services.product_service import ProductService
@@ -19,12 +20,26 @@ async def show_cart(callback: CallbackQuery):
     """Показать корзину"""
     user_service = UserService()
     user = await user_service.get_user(callback.from_user.id)
-    
+
+    # Если текущее сообщение — карточка товара с фото,
+    # удаляем её и показываем корзину отдельным текстовым сообщением.
+    is_photo_message = getattr(callback.message, "photo", None) is not None
     if not user or not user.cart:
-        await callback.message.edit_text(
-            CART_EMPTY,
-            reply_markup=get_main_menu_keyboard()
-        )
+        if is_photo_message:
+            try:
+                await callback.message.delete()
+            except Exception:
+                pass
+            await callback.message.answer(
+                CART_EMPTY,
+                reply_markup=get_main_menu_keyboard(),
+            )
+        else:
+            await edit_message_text_or_caption(
+                callback.message,
+                CART_EMPTY,
+                reply_markup=get_main_menu_keyboard(),
+            )
         await callback.answer()
         return
     
@@ -51,10 +66,21 @@ async def show_cart(callback: CallbackQuery):
             total_usd += item_total_usd
     
     if not cart_items:
-        await callback.message.edit_text(
-            CART_EMPTY,
-            reply_markup=get_main_menu_keyboard()
-        )
+        if is_photo_message:
+            try:
+                await callback.message.delete()
+            except Exception:
+                pass
+            await callback.message.answer(
+                CART_EMPTY,
+                reply_markup=get_main_menu_keyboard(),
+            )
+        else:
+            await edit_message_text_or_caption(
+                callback.message,
+                CART_EMPTY,
+                reply_markup=get_main_menu_keyboard(),
+            )
         await callback.answer()
         return
     
@@ -120,10 +146,21 @@ async def show_cart(callback: CallbackQuery):
         )
     )
     
-    await callback.message.edit_text(
-        text,
-        reply_markup=keyboard.as_markup()
-    )
+    if is_photo_message:
+        try:
+            await callback.message.delete()
+        except Exception:
+            pass
+        await callback.message.answer(
+            text,
+            reply_markup=keyboard.as_markup(),
+        )
+    else:
+        await edit_message_text_or_caption(
+            callback.message,
+            text,
+            reply_markup=keyboard.as_markup(),
+        )
     await callback.answer()
 
 
@@ -182,9 +219,10 @@ async def clear_cart(callback: CallbackQuery):
     
     if success:
         await callback.answer("🗑 Корзина очищена")
-        await callback.message.edit_text(
+        await edit_message_text_or_caption(
+            callback.message,
             CART_EMPTY,
-            reply_markup=get_main_menu_keyboard()
+            reply_markup=get_main_menu_keyboard(),
         )
     else:
         await callback.answer("❌ Не удалось очистить корзину", show_alert=True)

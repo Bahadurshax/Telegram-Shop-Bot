@@ -5,6 +5,7 @@ from aiogram.fsm.context import FSMContext
 
 from ..keyboards.inline import get_main_menu_keyboard
 from ..utils.messages import START_MESSAGE, HELP_MESSAGE
+from ..utils.telegram import edit_message_text_or_caption
 from ...services.user_service import UserService
 
 router = Router()
@@ -47,9 +48,10 @@ async def callback_main_menu(callback: CallbackQuery, state: FSMContext):
     """Возврат в главное меню"""
     await state.clear()
     
-    await callback.message.edit_text(
+    await edit_message_text_or_caption(
+        callback.message,
         START_MESSAGE,
-        reply_markup=get_main_menu_keyboard()
+        reply_markup=get_main_menu_keyboard(),
     )
     await callback.answer()
 

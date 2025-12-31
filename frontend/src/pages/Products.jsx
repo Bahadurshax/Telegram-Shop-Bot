@@ -148,6 +148,9 @@ const Products = () => {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Фото
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Название
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -170,6 +173,19 @@ const Products = () => {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {products.map((product) => (
                     <tr key={product.id}>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {product.image_url ? (
+                          <img
+                            src={product.image_url}
+                            alt={product.name}
+                            className="h-16 w-16 object-cover rounded-md border border-gray-200"
+                          />
+                        ) : (
+                          <div className="h-16 w-16 flex items-center justify-center rounded-md border border-dashed border-gray-300 text-xs text-gray-400">
+                            Нет фото
+                          </div>
+                        )}
+                      </td>
                       <td className="px-6 py-4">
                         <div className="text-sm font-medium text-gray-900">{product.name}</div>
                         <div className="text-sm text-gray-500">{product.description.substring(0, 100)}...</div>

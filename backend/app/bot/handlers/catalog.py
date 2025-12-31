@@ -1,25 +1,24 @@
 """
 Обработчики каталога товаров
 """
-from aiogram import Router, F
-from aiogram.types import CallbackQuery, InputMediaPhoto
-from aiogram.utils.media_group import MediaGroupBuilder
 from math import ceil
 
+from aiogram import Router, F
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InputMediaPhoto
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from aiogram.types import InlineKeyboardButton
 
 from ..keyboards.inline import (
-    get_catalog_keyboard, 
-    get_product_keyboard, 
+    get_catalog_keyboard,
+    get_product_keyboard,
     get_pagination_keyboard,
-    get_main_menu_keyboard
+    get_main_menu_keyboard,
 )
 from ..utils.messages import (
-    CATALOG_MESSAGE, 
-    CATALOG_EMPTY, 
-    PRODUCT_TEMPLATE
+    CATALOG_MESSAGE,
+    CATALOG_EMPTY,
+    PRODUCT_TEMPLATE,
 )
+from ..utils.telegram import edit_message_text_or_caption
 from ...services.product_service import ProductService
 from ...services.user_service import UserService
 
@@ -37,19 +36,43 @@ async def show_catalog(callback: CallbackQuery): # CallbackQuery - объект,
     # Проверяем наличие товаров
     total_products = await product_service.count_products()
     
+    # Если сообщение с товаром было карточкой с изображением (photo + caption),
+    # возвращаемся к текстовому сообщению каталога:
+    # удаляем фото-сообщение и отправляем новое обычное текстовое.
+    if getattr(callback.message, "photo", None):
+        try:
+            await callback.message.delete()
+        except Exception:
+            # Если удалить не удалось, просто продолжаем и попробуем отредактировать
+            pass
+
+        if total_products == 0:
+            await callback.message.answer(
+                CATALOG_EMPTY,
+                reply_markup=get_main_menu_keyboard(),
+            )
+        else:
+            await callback.message.answer(
+                CATALOG_MESSAGE,
+                reply_markup=get_catalog_keyboard(has_products=True),
+            )
+        await callback.answer()
+        return
+
     if total_products == 0:
-        await callback.message.edit_text(
+        await edit_message_text_or_caption(
+            callback.message,
             CATALOG_EMPTY,
-            reply_markup=get_main_menu_keyboard()
+            reply_markup=get_main_menu_keyboard(),
         )
         await callback.answer()
         return
     
-    # Показываем каталог с категориями
-    # callback.message - message with the callback button that originated the callback query
-    await callback.message.edit_text(
+    # Показываем каталог с категориями (обычное текстовое сообщение)
+    await edit_message_text_or_caption(
+        callback.message,
         CATALOG_MESSAGE,
-        reply_markup=get_catalog_keyboard(has_products=True)
+        reply_markup=get_catalog_keyboard(has_products=True),
     )
     await callback.answer()
 
@@ -79,6 +102,7 @@ async def show_products_pagination(callback: CallbackQuery):
 async def show_products_page(callback: CallbackQuery, category: str, page: int):
     """Показать страницу товаров"""
     product_service = ProductService()
+    is_photo_message = getattr(callback.message, "photo", None) is not None
     
     # Вычисляем параметры пагинации
     skip = (page - 1) * PRODUCTS_PER_PAGE
@@ -95,10 +119,21 @@ async def show_products_page(callback: CallbackQuery, category: str, page: int):
     )
     
     if not products:
-        await callback.message.edit_text(
-            CATALOG_EMPTY,
-            reply_markup=get_catalog_keyboard(has_products=False)
-        )
+        if is_photo_message:
+            try:
+                await callback.message.delete()
+            except Exception:
+                pass
+            await callback.message.answer(
+                CATALOG_EMPTY,
+                reply_markup=get_catalog_keyboard(has_products=False),
+            )
+        else:
+            await edit_message_text_or_caption(
+                callback.message,
+                CATALOG_EMPTY,
+                reply_markup=get_catalog_keyboard(has_products=False),
+            )
         await callback.answer()
         return
     
@@ -128,14 +163,18 @@ async def show_products_page(callback: CallbackQuery, category: str, page: int):
     
     keyboard_builder = []
     
-    # Добавляем кнопки товаров
+    # Добавляем кнопки товаров.
+    # В callback шлём и категорию, и текущую страницу, чтобы по «Назад»
+    # можно было вернуться ровно к этому списку.
     for product in products:
-        keyboard_builder.append([
-            {
-                "text": f"👁 {product.name[:30]}...",
-                "callback_data": f"product_{product.id}"
-            }
-        ])
+        keyboard_builder.append(
+            [
+                {
+                    "text": f"👁 {product.name[:30]}...",
+                    "callback_data": f"product_{product.id}_{category}_{page}",
+                }
+            ]
+        )
     
     # Пагинация
     if total_pages > 1: # если страниц больше одной, добавляем кнопки пагинации
@@ -189,17 +228,45 @@ async def show_products_page(callback: CallbackQuery, category: str, page: int):
             ]
             keyboard.row(*buttons)
     
-    await callback.message.edit_text(
-        text,
-        reply_markup=keyboard.as_markup()
-    )
+    if is_photo_message:
+        # Если предыдущее сообщение было карточкой товара с фото,
+        # удаляем его и отправляем новый текстовый список товаров,
+        # чтобы картинка исчезла.
+        try:
+            await callback.message.delete()
+        except Exception:
+            pass
+        await callback.message.answer(
+            text,
+            reply_markup=keyboard.as_markup(),
+        )
+    else:
+        await edit_message_text_or_caption(
+            callback.message,
+            text,
+            reply_markup=keyboard.as_markup(),
+        )
     await callback.answer()
 
 
 @router.callback_query(F.data.startswith("product_"))
 async def show_product_detail(callback: CallbackQuery):
     """Показать детали товара"""
-    product_id = callback.data.split("product_")[1]
+    # Возможные форматы callback_data:
+    # - старый: product_{product_id}
+    # - новый: product_{product_id}_{category}_{page}
+    raw = callback.data[len("product_") :]
+    parts = raw.split("_")
+
+    if len(parts) >= 3 and parts[-1].isdigit():
+        page = int(parts[-1])
+        category = "_".join(parts[1:-1]) or "all"
+        product_id = parts[0]
+    else:
+        # Совместимость со старым форматом
+        product_id = raw
+        category = "all"
+        page = 1
     
     product_service = ProductService()
     user_service = UserService()
@@ -216,7 +283,7 @@ async def show_product_detail(callback: CallbackQuery):
     if user:
         in_cart = any(item.product_id == product_id for item in user.cart)
     
-    # Формируем текст
+    # Формируем текст карточки товара
     text = PRODUCT_TEMPLATE.format(
         name=product.name,
         description=product.description,
@@ -225,23 +292,37 @@ async def show_product_detail(callback: CallbackQuery):
         usd_rate=product.usd_rate
     )
     
-    # Если есть изображение, отправляем с фото
-    if product.image_id:
+    # Если есть изображение — превращаем текущее сообщение в карточку с фото:
+    # редактируем media (InputMediaPhoto) и задаём caption как текст карточки.
+    # Далее все другие хендлеры используют helper edit_message_text_or_caption,
+    # который вызывает edit_caption для таких сообщений.
+    if product.image_url:
         try:
-            # TODO: Реализовать отправку изображения из GridFS
-            await callback.message.edit_text(
-                text,
-                reply_markup=get_product_keyboard(product_id, in_cart)
+            await callback.message.edit_media(
+                media=InputMediaPhoto(
+                    media=product.image_url,
+                    caption=text,
+                    parse_mode="HTML",
+                ),
+                reply_markup=get_product_keyboard(
+                    product_id, in_cart, category=category, page=page
+                ),
             )
         except Exception:
-            await callback.message.edit_text(
+            await edit_message_text_or_caption(
+                callback.message,
                 text,
-                reply_markup=get_product_keyboard(product_id, in_cart)
+                reply_markup=get_product_keyboard(
+                    product_id, in_cart, category=category, page=page
+                ),
             )
     else:
-        await callback.message.edit_text(
+        await edit_message_text_or_caption(
+            callback.message,
             text,
-            reply_markup=get_product_keyboard(product_id, in_cart)
+            reply_markup=get_product_keyboard(
+                product_id, in_cart, category=category, page=page
+            ),
         )
     
     await callback.answer()
