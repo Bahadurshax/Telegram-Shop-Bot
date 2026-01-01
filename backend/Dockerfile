@@ -29,4 +29,4 @@ COPY . .
 EXPOSE 8000
 
 # Start FastAPI app
-CMD ["python3", "run.py"]
+CMD ["uv", "run", "run.py"]
