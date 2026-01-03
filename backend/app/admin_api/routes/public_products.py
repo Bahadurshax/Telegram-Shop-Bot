@@ -22,9 +22,7 @@ async def get_public_products(
     product_service = ProductService()
 
     if search:
-        products = await product_service.search_products(search, skip=skip, limit=limit)
-        # Фильтруем только активные товары
-        products = [p for p in products if p.is_active]
+        products = await product_service.search_products(search, skip=skip, limit=limit, is_active=True)
     else:
         # Получаем только активные товары
         products = await product_service.get_products(

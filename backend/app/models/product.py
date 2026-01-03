@@ -53,3 +53,4 @@ class ProductUpdate(BaseModel):
   usd_rate: Optional[float] = None
   category: Optional[str] = None
   is_active: Optional[bool] = None
+  image_url: Optional[str] = None

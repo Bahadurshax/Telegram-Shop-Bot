@@ -35,6 +35,9 @@ backend/.env
 backend/.venv
 backend/__pycache__
 backend/*.pyc
+backend/data/uploads
+
+.claude
 
 .env
 

@@ -7,8 +7,9 @@ import Products from './pages/Products'
 import Orders from './pages/Orders'
 import UploadPricelist from './pages/UploadPriceList'
 import { apiService } from './services/api'
+import { API_CONFIG } from './utils/constants'
+import Loading from './components/Common/Loading'
 import './App.css'
-
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
@@ -19,13 +20,13 @@ function App() {
   }, [])
 
   const checkAuthStatus = async () => {
-    const token = localStorage.getItem('admin_token')
+    const token = localStorage.getItem(API_CONFIG.TOKEN_KEY)
     if (token) {
       try {
         await apiService.getCurrentUser()
         setIsAuthenticated(true)
       } catch (error) {
-        localStorage.removeItem('admin_token')
+        localStorage.removeItem(API_CONFIG.TOKEN_KEY)
         setIsAuthenticated(false)
       }
     }
@@ -33,26 +34,26 @@ function App() {
   }
 
   const handleLogin = (token) => {
-    localStorage.setItem('admin_token', token)
+    localStorage.setItem(API_CONFIG.TOKEN_KEY, token)
     setIsAuthenticated(true)
   }
 
   const handleLogout = () => {
-    localStorage.removeItem('admin_token')
+    localStorage.removeItem(API_CONFIG.TOKEN_KEY)
     setIsAuthenticated(false)
   }
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-500"></div>
+        <Loading size="large" />
       </div>
     )
   }
 
   return (
     <Router>
-      <div className="App">
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-900 transition-colors duration-300">
         {!isAuthenticated ? (
           <Login onLogin={handleLogin} />
         ) : (

@@ -32,11 +32,13 @@ class ProductRepository:
     return None
 
 
-  async def get_products(self, category: Optional[str]=None, is_active: bool = True, skip: int = 0, limit: int = 10) -> List[Product]:
-    filter_dict = {"is_active": is_active}
+  async def get_products(self, category: Optional[str]=None, is_active: Optional[bool] = None, skip: int = 0, limit: int = 10) -> List[Product]:
+    filter_dict = {}
+
+    if is_active is not None:
+      filter_dict["is_active"] = is_active
 
     if category and category != "all":
-      filter_dict["category"] = category
 
 
     # skip(skip) - skips the first skip results of the cursor
@@ -51,8 +53,11 @@ class ProductRepository:
     return products
 
 
-  async def count_products(self, category: Optional[str]=None, is_active: bool=True) -> int:
-    filter_dict = {"is_active": is_active}
+  async def count_products(self, category: Optional[str]=None, is_active: Optional[bool]=None) -> int:
+    filter_dict = {}
+    if is_active is not None:
+      filter_dict["is_active"] = is_active
+      
     if category and category != "all":
       filter_dict["category"] = category
     
@@ -87,14 +92,16 @@ class ProductRepository:
     categories = await self.collection.distinct("category", {"is_active": True})
     return categories
 
-  async def search_products(self, query: str, skip: int = 0, limit: int = 10) -> List[Product]:
+  async def search_products(self, query: str, skip: int = 0, limit: int = 10, is_active: Optional[bool] = None) -> List[Product]:
     filter_dict = {
-      "is_active": True,
       "$or": [
         {"name": {"$regex": query, "$options": "i"}},
         {"description": {"$regex": query, "$options": "i"}}
       ]
     }
+    
+    if is_active is not None:
+      filter_dict["is_active"] = is_active
 
     cursor = self.collection.find(filter_dict).skip(skip).limit(limit)
     products = []

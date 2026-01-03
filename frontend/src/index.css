@@ -2,12 +2,16 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Custom styles */
-.App {
-  min-height: 100vh;
+@layer base {
+  html {
+    @apply h-full;
+  }
+
+  body {
+    @apply h-full bg-slate-50 text-slate-900 dark:bg-slate-900 dark:text-slate-50 font-sans antialiased transition-colors duration-300;
+  }
 }
 
-/* Loading spinner */
 @keyframes spin {
   to {
     transform: rotate(360deg);

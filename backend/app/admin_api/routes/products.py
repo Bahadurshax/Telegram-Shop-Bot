@@ -25,12 +25,11 @@ async def get_products(
     product_service = ProductService()
     
     if search:
-        products = await product_service.search_products(search, skip=skip, limit=limit)
+        products = await product_service.search_products(search, skip=skip, limit=limit, is_active=is_active)
     else:
-        active_filter = is_active if is_active is not None else True
         products = await product_service.get_products(
             category=category,
-            is_active=active_filter,
+            is_active=is_active,
             skip=skip,
             limit=limit
         )
@@ -47,11 +46,10 @@ async def get_products_count(
     """Получить количество товаров"""
     
     product_service = ProductService()
-    active_filter = is_active if is_active is not None else True
     
     count = await product_service.count_products(
         category=category,
-        is_active=active_filter
+        is_active=is_active
     )
     
     return {"count": count}

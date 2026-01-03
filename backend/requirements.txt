@@ -1,0 +1,33 @@
+# Telegram Bot
+aiogram
+aiohttp
+
+# Database
+motor
+pymongo
+
+# FastAPI для админки
+fastapi
+uvicorn[standard]
+python-multipart
+
+# AI
+anthropic
+
+# Data processing
+pandas
+openpyxl
+
+# Authentication & Security
+python-jose[cryptography]
+passlib[bcrypt]
+
+# Validation
+pydantic
+pydantic-settings
+
+# Utils
+python-dotenv
+pillow
+aiofiles
+supabase

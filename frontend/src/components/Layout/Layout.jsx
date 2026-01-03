@@ -1,55 +1,97 @@
 import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
+import { useTheme } from '../../context/ThemeContext'
+import ThemeToggle from '../Common/ThemeToggle'
+import {
+  LayoutDashboard,
+  Package,
+  ShoppingCart,
+  Upload,
+  LogOut,
+  Menu
+} from 'lucide-react'
 
 const Layout = ({ children, onLogout }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const { theme } = useTheme()
   const location = useLocation()
 
   const navigation = [
-    { name: 'Дашборд', href: '/dashboard', icon: '📊' },
-    { name: 'Товары', href: '/products', icon: '📦' },
-    { name: 'Заказы', href: '/orders', icon: '🛒' },
-    { name: 'Загрузка прайса', href: '/upload', icon: '📤' },
+    {
+      name: 'Дашборд',
+      href: '/dashboard',
+      icon: <LayoutDashboard className="w-5 h-5" />
+    },
+    {
+      name: 'Товары',
+      href: '/products',
+      icon: <Package className="w-5 h-5" />
+    },
+    {
+      name: 'Заказы',
+      href: '/orders',
+      icon: <ShoppingCart className="w-5 h-5" />
+    },
+    {
+      name: 'Загрузка прайса',
+      href: '/upload',
+      icon: <Upload className="w-5 h-5" />
+    },
   ]
 
   const isCurrentPage = (href) => location.pathname === href
 
   return (
-    <div className="min-h-screen bg-gray-100 flex">
-      {/* Sidebar */}
-      <div className={`${sidebarOpen ? 'block' : 'hidden'} fixed inset-0 z-40 md:hidden`}>
-        <div className="fixed inset-0 bg-gray-600 opacity-75" onClick={() => setSidebarOpen(false)}></div>
-      </div>
+    <div className="h-screen bg-slate-50 dark:bg-slate-900 flex font-sans overflow-hidden transition-colors duration-300">
+      {/* Mobile sidebar backdrop */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-sm md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        ></div>
+      )}
 
-      <div className={`${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} fixed z-40 inset-y-0 left-0 w-64 transition duration-300 transform bg-white border-r border-gray-200 md:translate-x-0 md:static md:inset-0`}>
+      <div className={`
+        fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 transform transition-transform duration-300 ease-in-out
+        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+        md:translate-x-0 md:static md:inset-auto md:h-full
+      `}>
         <div className="flex flex-col h-full">
-          <div className="flex items-center justify-center h-16 px-4 bg-blue-600 text-white">
-            <h1 className="text-xl font-bold">Telegram Shop</h1>
+          <div className="flex items-center h-16 px-6 border-b border-slate-100 dark:border-slate-700">
+            <span className="text-xl font-bold text-primary-600 dark:text-primary-400">
+              Telegram Shop
+            </span>
           </div>
-          
-          <nav className="flex-1 px-4 py-4 space-y-2">
+
+          <nav className="flex-1 px-4 py-6 space-y-1">
             {navigation.map((item) => (
               <Link
                 key={item.name}
                 to={item.href}
-                className={`flex items-center px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                  isCurrentPage(item.href)
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'text-gray-700 hover:bg-gray-100'
-                }`}
+                className={`
+                  flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 group
+                  ${isCurrentPage(item.href)
+                    ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-400 shadow-sm'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700/50 hover:text-slate-900 dark:hover:text-slate-100'
+                  }
+                `}
               >
-                <span className="mr-3">{item.icon}</span>
+                <div className={`mr-3 transition-colors ${isCurrentPage(item.href) ? 'text-primary-500' : 'text-slate-400 dark:text-slate-500 group-hover:text-slate-600 dark:group-hover:text-slate-300'}`}>
+                  {item.icon}
+                </div>
                 {item.name}
               </Link>
             ))}
           </nav>
-          
-          <div className="px-4 py-4 border-t border-gray-200">
+
+          <div className="p-4 border-t border-slate-100 dark:border-slate-700 space-y-2">
+            <ThemeToggle />
+
             <button
               onClick={onLogout}
-              className="flex items-center w-full px-4 py-2 text-sm font-medium text-red-700 rounded-md hover:bg-red-50"
+              className="flex items-center w-full px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/10 hover:text-red-600 dark:hover:text-red-400 transition-colors"
             >
-              <span className="mr-3">🚪</span>
+              <LogOut className="w-5 h-5 mr-3" />
               Выйти
             </button>
           </div>
@@ -57,26 +99,24 @@ const Layout = ({ children, onLogout }) => {
       </div>
 
       {/* Main content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="bg-white shadow-sm border-b border-gray-200">
-          <div className="flex items-center justify-between px-4 py-4">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 lg:hidden">
+          <div className="flex items-center justify-between px-4 py-3">
             <button
               onClick={() => setSidebarOpen(true)}
-              className="md:hidden p-2 rounded-md text-gray-500 hover:text-gray-600 hover:bg-gray-100"
+              className="p-2 -ml-2 text-slate-500 dark:text-slate-400 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-500"
             >
-              <span className="text-xl">☰</span>
+              <Menu className="w-6 h-6" />
             </button>
-            <h2 className="text-lg font-semibold text-gray-900">
-              Панель управления
-            </h2>
-            <div className="text-sm text-gray-500">
-              Добро пожаловать, Администратор
-            </div>
+            <span className="text-lg font-bold text-slate-900 dark:text-slate-100">Telegram Shop</span>
+            <ThemeToggle showLabel={false} className="p-2 -mr-2" />
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-6">
-          {children}
+        <main className="flex-1 overflow-y-auto p-4 md:p-8">
+          <div className="max-w-7xl mx-auto">
+            {children}
+          </div>
         </main>
       </div>
     </div>

@@ -1,39 +1,78 @@
-const API_BASE_URL = '/admin/api'
+import { API_CONFIG } from '../utils/constants'
 
 class ApiService {
   constructor() {
-    this.baseURL = API_BASE_URL
+    this.baseURL = API_CONFIG.BASE_URL
   }
 
-  getHeaders() {
-    const token = localStorage.getItem('admin_token')
-    return {
-      'Content-Type': 'application/json',
-      ...(token && { 'Authorization': `Bearer ${token}` })
+  getAuthToken() {
+    return localStorage.getItem(API_CONFIG.TOKEN_KEY)
+  }
+
+  async handleResponse(response) {
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem(API_CONFIG.TOKEN_KEY)
+        window.location.reload()
+      }
+
+      // Попробуем распарсить JSON ошибки, если он есть
+      try {
+        const errorData = await response.json()
+        throw new Error(errorData.detail || errorData.message || `HTTP error! status: ${response.status}`)
+      } catch (e) {
+        // Если не JSON, выбрасываем статус
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
     }
+    return response.json()
   }
 
   async request(endpoint, options = {}) {
     const url = `${this.baseURL}${endpoint}`
+
+    const headers = {
+      'Content-Type': 'application/json',
+      ...options.headers
+    }
+
+    const token = this.getAuthToken()
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`
+    }
+
     const config = {
-      headers: this.getHeaders(),
-      ...options
+      ...options,
+      headers
     }
 
     try {
       const response = await fetch(url, config)
-      
-      if (!response.ok) {
-        if (response.status === 401) {
-          localStorage.removeItem('admin_token')
-          window.location.reload()
-        }
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-
-      return await response.json()
+      return await this.handleResponse(response)
     } catch (error) {
-      console.error('API Error:', error)
+      console.error(`API Error (${endpoint}):`, error)
+      throw error
+    }
+  }
+
+  async upload(endpoint, formData) {
+    const url = `${this.baseURL}${endpoint}`
+
+    const headers = {}
+    const token = this.getAuthToken()
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`
+    }
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: formData
+      })
+      return await this.handleResponse(response)
+    } catch (error) {
+      console.error(`Upload Error (${endpoint}):`, error)
       throw error
     }
   }
@@ -120,34 +159,6 @@ class ApiService {
     return this.request('/orders/stats/summary')
   }
 
-  // Upload
-  async uploadImages(files) {
-    const formData = new FormData()
-
-    // Добавляем файлы в FormData
-    for (let i = 0; i < files.length; i++) {
-      formData.append('files', files[i])
-    }
-
-    const token = localStorage.getItem('admin_token')
-
-    return fetch(`${this.baseURL}/upload/images`, {
-      method: 'POST',
-      headers: {
-        ...(token && { 'Authorization': `Bearer ${token}` })
-      },
-      body: formData
-    }).then(response => {
-      if (!response.ok) {
-        if (response.status === 401) {
-          localStorage.removeItem('admin_token')
-          window.location.reload()
-        }
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-      return response.json()
-    })
-  }
 
   async uploadPricelist(file, sheetNames = [], skipDuplicates = true) {
     const formData = new FormData()
@@ -160,48 +171,13 @@ class ApiService {
       })
     }
 
-    const token = localStorage.getItem('admin_token')
-
-    return fetch(`${this.baseURL}/upload/pricelist`, {
-      method: 'POST',
-      headers: {
-        ...(token && { Authorization: `Bearer ${token}` })
-      },
-      body: formData
-    }).then(response => {
-      if (!response.ok) {
-        if (response.status === 401) {
-          localStorage.removeItem('admin_token')
-          window.location.reload()
-        }
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-      return response.json()
-    })
+    return this.upload('/upload/pricelist', formData)
   }
 
   async getAvailableSheets(file) {
     const formData = new FormData()
     formData.append('file', file)
-
-    const token = localStorage.getItem('admin_token')
-
-    return fetch(`${this.baseURL}/upload/pricelist/sheets`, {
-      method: 'POST',
-      headers: {
-        ...(token && { Authorization: `Bearer ${token}` })
-      },
-      body: formData
-    }).then(response => {
-      if (!response.ok) {
-        if (response.status === 401) {
-          localStorage.removeItem('admin_token')
-          window.location.reload()
-        }
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-      return response.json()
-    })
+    return this.upload('/upload/pricelist/sheets', formData)
   }
 }
 

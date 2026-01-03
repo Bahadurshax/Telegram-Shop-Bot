@@ -26,7 +26,7 @@ class ProductService:
     async def get_products(
         self,
         category: Optional[str] = None,
-        is_active: bool = True,
+        is_active: Optional[bool] = None,
         skip: int = 0,
         limit: int = 10
     ) -> List[Product]:
@@ -42,7 +42,7 @@ class ProductService:
     async def count_products(
         self,
         category: Optional[str] = None,
-        is_active: bool = True
+        is_active: Optional[bool] = None
     ) -> int:
         """Подсчитать количество товаров"""
         return await self.collection.count_products(
@@ -74,10 +74,11 @@ class ProductService:
         self,
         query: str,
         skip: int = 0,
-        limit: int = 10
+        limit: int = 10,
+        is_active: Optional[bool] = None
     ) -> List[Product]:
         """Поиск товаров"""
-        return await self.collection.search_products(query, skip, limit)
+        return await self.collection.search_products(query, skip, limit, is_active)
 
     async def create_products_bulk(self, products_data: List[ProductCreate]) -> List[Product]:
         """Массовое создание товаров"""
