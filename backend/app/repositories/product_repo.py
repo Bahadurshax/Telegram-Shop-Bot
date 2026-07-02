@@ -39,7 +39,7 @@ class ProductRepository:
       filter_dict["is_active"] = is_active
 
     if category and category != "all":
-
+      filter_dict["category"] = category
 
     # skip(skip) - skips the first skip results of the cursor
     # limit(limit) - limits the number of results returned by the cursor

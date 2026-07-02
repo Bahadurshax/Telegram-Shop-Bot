@@ -1,8 +1,11 @@
 """
 Аутентификация для админ-панели
 """
+import secrets
 from datetime import datetime, timedelta
 from typing import Optional
+
+import bcrypt
 from fastapi import HTTPException, status, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
@@ -14,6 +17,20 @@ security = HTTPBearer()
 # Настройки JWT
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_HOURS = 24
+
+# Фиктивный хеш: выравнивает время ответа при неверном логине,
+# чтобы нельзя было перебором определить имя пользователя
+_DUMMY_HASH = bcrypt.hashpw(b"dummy", bcrypt.gensalt())
+
+
+def authenticate_admin(username: str, password: str) -> bool:
+    """Проверить логин и пароль админа (constant-time)"""
+    user_ok = secrets.compare_digest(
+        username.encode(), settings.ADMIN_USERNAME.encode()
+    )
+    stored = settings.ADMIN_PASSWORD_HASH.encode() if user_ok else _DUMMY_HASH
+    pass_ok = bcrypt.checkpw(password.encode(), stored)
+    return user_ok and pass_ok
 
 
 def create_admin_token(username: str) -> str:

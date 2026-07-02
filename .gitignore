@@ -32,6 +32,8 @@ frontend/*.local
 #backend
 backend/logs
 backend/.env
+backend/.env.bak
+*.env.bak
 backend/.venv
 backend/__pycache__
 backend/*.pyc

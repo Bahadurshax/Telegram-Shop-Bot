@@ -22,14 +22,17 @@ class Settings(BaseSettings):
     # Admin API
     ADMIN_API_HOST: str = os.getenv("ADMIN_API_HOST", "127.0.0.1")
     ADMIN_API_PORT: int = int(os.getenv("ADMIN_API_PORT", "8000"))
-    SECRET_KEY: str = os.getenv("SECRET_KEY", "your-secret-key-here")
-    
+    SECRET_KEY: str  # обязательное поле — приложение не стартует без него
+
     # Admin auth
-    ADMIN_USERNAME: str = os.getenv("ADMIN_USERNAME", "admin")
-    ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", "admin123")
+    ADMIN_USERNAME: str  # обязательное поле
+    ADMIN_PASSWORD_HASH: str  # bcrypt-хеш пароля, не сам пароль
     
     # Telegram Admin
     ADMIN_TELEGRAM_ID: Optional[int] = None
+
+    # Telegram Mini App (если задан — кнопка консультанта открывает мини-апп)
+    MINI_APP_URL: str = os.getenv("MINI_APP_URL", "")
     
     # Limits
     MAX_CART_ITEMS: int = 50

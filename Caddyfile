@@ -1,0 +1,10 @@
+# DOMAIN приходит из docker-compose (переменная окружения).
+# Если это реальный домен (например shop.example.uz), Caddy сам получит
+# и будет продлевать сертификат Let's Encrypt — ничего настраивать не нужно.
+{$DOMAIN} {
+	# Все запросы идут в nginx фронтенда; он раздает админку
+	# и проксирует /admin/api и /api в backend
+	reverse_proxy frontend:80
+
+	encode gzip
+}

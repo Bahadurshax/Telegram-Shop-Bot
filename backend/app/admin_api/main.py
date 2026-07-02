@@ -8,16 +8,22 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 import os
 
-from .auth import verify_admin_token, create_admin_token
+from .auth import verify_admin_token, create_admin_token, authenticate_admin
 from .routes.products import router as products_router
 from .routes.orders import router as orders_router
 from .routes.upload import router as upload_router
 from .routes.dashboard import router as dashboard_router
 from .routes.public_products import router as public_products_router
+from .routes.consultation import router as consultation_router
+from .routes.cart import router as cart_router
 from ..database import db
 
-def create_admin_app() -> FastAPI:
-    """Создать FastAPI приложение для админки"""
+def create_admin_app(bot=None) -> FastAPI:
+    """Создать FastAPI приложение для админки
+
+    bot — экземпляр aiogram Bot (если API запущен вместе с ботом);
+    используется, чтобы отправлять результаты консультации в чат.
+    """
     
     app = FastAPI(
         title="Telegram Shop Admin API",
@@ -26,6 +32,8 @@ def create_admin_app() -> FastAPI:
         docs_url="/admin/docs",
         redoc_url="/admin/redoc"
     )
+
+    app.state.bot = bot
     
     # CORS для фронтенда
     app.add_middleware(
@@ -62,17 +70,19 @@ def create_admin_app() -> FastAPI:
 
     # Публичные роуты для веб-приложения
     app.include_router(public_products_router, prefix="/api", tags=["public"])
+
+    # Роуты Mini App (авторизация через Telegram initData)
+    app.include_router(consultation_router, prefix="/api", tags=["mini-app"])
+    app.include_router(cart_router, prefix="/api", tags=["mini-app"])
     
     # Аутентификация
     @app.post("/admin/api/auth/login")
     async def login(credentials: dict):
         """Авторизация админа"""
-        from ..config import settings
-        
         username = credentials.get("username")
         password = credentials.get("password")
-        
-        if username == settings.ADMIN_USERNAME and password == settings.ADMIN_PASSWORD:
+
+        if username and password and authenticate_admin(username, password):
             token = create_admin_token(username)
             return {"access_token": token, "token_type": "bearer"}
         

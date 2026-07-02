@@ -21,6 +21,7 @@ openpyxl
 # Authentication & Security
 python-jose[cryptography]
 passlib[bcrypt]
+bcrypt
 
 # Validation
 pydantic

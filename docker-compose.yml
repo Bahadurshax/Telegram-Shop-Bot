@@ -1,4 +1,22 @@
 services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      # DOMAIN задается в .env рядом с этим файлом;
+      # по умолчанию — http://localhost для локальной разработки (без TLS)
+      - DOMAIN=${DOMAIN:-http://localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data      # сертификаты Let's Encrypt
+      - caddy_config:/config
+    depends_on:
+      - frontend
+
   backend:
     build:
       context: ./backend
@@ -16,7 +34,11 @@ services:
       dockerfile: Dockerfile
     container_name: vite-frontend
     restart: unless-stopped
-    ports:
-      - "80:80"  # host:container (frontend served on localhost:80)
+    expose:
+      - "80"     # наружу смотрит только caddy
     depends_on:
       - backend
+
+volumes:
+  caddy_data:
+  caddy_config:

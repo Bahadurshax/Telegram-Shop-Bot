@@ -54,7 +54,7 @@ class TelegramShopApp:
     async def setup_admin_app(self):
         """Инициализация админ-панели"""
         try:
-            self.admin_app = create_admin_app()
+            self.admin_app = create_admin_app(bot=self.bot)
             logger.info("Админ-панель инициализирована")
             
         except Exception as e:

@@ -1,17 +1,28 @@
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from typing import List, Optional
 
 from ..utils.messages import *
+from ...config import settings
+
+
+def _get_consultant_button() -> InlineKeyboardButton:
+    """Кнопка консультанта: мини-апп, если задан MINI_APP_URL, иначе анкета в чате"""
+    if settings.MINI_APP_URL:
+        return InlineKeyboardButton(
+            text=BUTTON_CONSULTANT,
+            web_app=WebAppInfo(url=settings.MINI_APP_URL)
+        )
+    return InlineKeyboardButton(text=BUTTON_CONSULTANT, callback_data="consultant")
 
 
 def get_main_menu_keyboard() -> InlineKeyboardMarkup:
     """Главное меню"""
     keyboard = InlineKeyboardBuilder()
-    
+
     keyboard.row(
         InlineKeyboardButton(text=BUTTON_CATALOG, callback_data="catalog"),
-        InlineKeyboardButton(text=BUTTON_CONSULTANT, callback_data="consultant")
+        _get_consultant_button()
     )
     keyboard.row(
         InlineKeyboardButton(text=BUTTON_CART, callback_data="cart"),
