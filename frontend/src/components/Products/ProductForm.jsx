@@ -1,7 +1,10 @@
 import { useState } from 'react'
 import { CATEGORIES, CATEGORY_NAMES } from '../../utils/constants'
 import { validateProductForm } from '../../utils/validation'
+import { apiService } from '../../services/api'
 import Modal from '../Common/Modal'
+
+const MAX_IMAGE_SIZE_MB = 10
 
 const ProductForm = ({ product, onSubmit, onCancel }) => {
     const [formData, setFormData] = useState({
@@ -14,6 +17,37 @@ const ProductForm = ({ product, onSubmit, onCancel }) => {
         is_active: product?.is_active ?? true,
         image_url: product?.image_url || ''
     })
+    const [uploadingImage, setUploadingImage] = useState(false)
+
+    const handleImageSelect = async (e) => {
+        const file = e.target.files[0]
+        e.target.value = ''
+        if (!file) return
+
+        if (!file.type.startsWith('image/')) {
+            alert('Пожалуйста, выберите файл изображения')
+            return
+        }
+        if (file.size > MAX_IMAGE_SIZE_MB * 1024 * 1024) {
+            alert(`Файл слишком большой. Максимум ${MAX_IMAGE_SIZE_MB}MB`)
+            return
+        }
+
+        setUploadingImage(true)
+        try {
+            const { image_url } = await apiService.uploadProductImage(file)
+            setFormData(prev => ({ ...prev, image_url }))
+        } catch (error) {
+            console.error('Error uploading image:', error)
+            alert('Ошибка загрузки изображения')
+        } finally {
+            setUploadingImage(false)
+        }
+    }
+
+    const handleImageRemove = () => {
+        setFormData(prev => ({ ...prev, image_url: '' }))
+    }
 
     const handleSubmit = (e) => {
         e.preventDefault()
@@ -131,6 +165,46 @@ const ProductForm = ({ product, onSubmit, onCancel }) => {
                         </select>
                     </div>
 
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Изображение</label>
+                        <div className="flex items-center gap-4">
+                            {formData.image_url ? (
+                                <img
+                                    src={formData.image_url}
+                                    alt="Изображение товара"
+                                    className="h-20 w-20 rounded-lg object-cover border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                                />
+                            ) : (
+                                <div className="h-20 w-20 rounded-lg border border-dashed border-slate-300 dark:border-slate-700 flex items-center justify-center text-slate-400 dark:text-slate-500">
+                                    <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                    </svg>
+                                </div>
+                            )}
+                            <div className="flex flex-col gap-2">
+                                <label className={`px-4 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-center ${uploadingImage ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}>
+                                    {uploadingImage ? 'Загрузка...' : (formData.image_url ? 'Заменить' : 'Загрузить изображение')}
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={handleImageSelect}
+                                        disabled={uploadingImage}
+                                        className="hidden"
+                                    />
+                                </label>
+                                {formData.image_url && !uploadingImage && (
+                                    <button
+                                        type="button"
+                                        onClick={handleImageRemove}
+                                        className="text-sm font-medium text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 transition-colors"
+                                    >
+                                        Удалить
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
                     <div className="flex items-center">
                         <input
                             id="is_active"
@@ -156,7 +230,8 @@ const ProductForm = ({ product, onSubmit, onCancel }) => {
                     </button>
                     <button
                         type="submit"
-                        className="px-4 py-2 bg-blue-600 border border-transparent rounded-lg text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 shadow-sm transition-colors"
+                        disabled={uploadingImage}
+                        className="px-4 py-2 bg-blue-600 border border-transparent rounded-lg text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {product ? 'Сохранить' : 'Добавить'}
                     </button>

@@ -4,6 +4,7 @@
 Важно: Класс сохраняет название `ImageKitService`, чтобы не менять импорты
 в остальных частях приложения, но фактически работает с Supabase.
 """
+import mimetypes
 import os
 from datetime import datetime
 from typing import Optional
@@ -28,8 +29,12 @@ class ImageKitService:
                 "SUPABASE_URL и SUPABASE_SERVICE_ROLE_KEY должны быть заданы в переменных окружения"
             )
 
-        # Нормализуем URL (без лишнего завершающего слэша, supabase-py сам добавит нужные пути)
+        # Нормализуем URL: нужен базовый URL проекта, без завершающего слэша
+        # и без REST-суффикса (клиент сам добавляет /storage/v1 и т.п.;
+        # с суффиксом /rest/v1 все запросы к Storage падают с 404)
         base_url = settings.SUPABASE_URL.rstrip("/")
+        if base_url.endswith("/rest/v1"):
+            base_url = base_url[: -len("/rest/v1")]
 
         self.client: Client = create_client(
             base_url,
@@ -66,8 +71,9 @@ class ImageKitService:
 
             # Загружаем файл
             storage = self.client.storage.from_(self.bucket_name)
+            content_type = mimetypes.guess_type(unique_name)[0] or "image/png"
             # `upload` выбросит исключение при ошибке
-            storage.upload(path_in_bucket, image_data)
+            storage.upload(path_in_bucket, image_data, {"content-type": content_type})
 
             # Получаем публичный URL
             public_url = storage.get_public_url(path_in_bucket)

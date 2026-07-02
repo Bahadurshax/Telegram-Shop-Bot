@@ -2,9 +2,11 @@
 API для управления товарами
 """
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 
 from ..auth import verify_admin_token
+from ...config import settings
+from ...services.image_service import image_service
 from ...services.product_service import ProductService
 from ...models.product import Product, ProductCreate, ProductUpdate
 
@@ -53,6 +55,31 @@ async def get_products_count(
     )
     
     return {"count": count}
+
+
+@router.post("/products/upload-image")
+async def upload_product_image(
+    file: UploadFile = File(...),
+    admin: str = Depends(verify_admin_token)
+):
+    """Загрузить изображение товара в Supabase Storage, вернуть публичный URL"""
+
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Поддерживаются только изображения")
+
+    content = await file.read()
+
+    if len(content) > settings.MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Файл слишком большой (макс. {settings.MAX_FILE_SIZE // (1024*1024)}МБ)"
+        )
+
+    image_url = image_service.upload_image(content, file.filename or "image.png", folder="products")
+    if not image_url:
+        raise HTTPException(status_code=500, detail="Не удалось загрузить изображение")
+
+    return {"image_url": image_url}
 
 
 @router.get("/products/{product_id}", response_model=Product)

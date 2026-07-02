@@ -133,6 +133,12 @@ class ApiService {
     return this.request('/products/categories/list')
   }
 
+  async uploadProductImage(file) {
+    const formData = new FormData()
+    formData.append('file', file)
+    return this.upload('/products/upload-image', formData)
+  }
+
   // Orders
   async getOrders(params = {}) {
     const queryString = new URLSearchParams(params).toString()

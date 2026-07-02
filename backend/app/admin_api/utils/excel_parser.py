@@ -2,6 +2,7 @@
 Парсер Excel файлов для загрузки прайс-листов
 """
 import io
+import hashlib
 import tempfile
 import os
 from typing import List, Dict, Optional, Any
@@ -92,6 +93,12 @@ class ExcelParser:
         # Последний считанный курс USD из файла (нужен, если курс указан только в одной строке)
         self._last_usd_rate: Optional[float] = None
         self._temp_file_path: Optional[str] = None
+        # Кэш изображений текущего листа: строка Excel -> список изображений
+        self._image_ws = None
+        self._image_map: Dict[int, List[Dict[str, Any]]] = {}
+        self._claimed_images: set[int] = set()
+        # Кэш загрузок: md5 содержимого -> публичный URL (не грузим повторы дважды)
+        self._uploaded_by_hash: Dict[str, str] = {}
 
         if content is not None:
             # Новый сценарий: сохраняем контент во временный файл
@@ -128,7 +135,9 @@ class ExcelParser:
         products_dicts: List[Dict[str, Any]] = []
 
         try:
-            workbook = load_workbook(self._temp_file_path, data_only=False)
+            # data_only=True: для формул (=F4*G4, =NVR!G4) берём вычисленное
+            # значение из кэша Excel, а не текст формулы
+            workbook = load_workbook(self._temp_file_path, data_only=True)
 
             # Определяем, какие листы нужно парсить
             if sheet_names:
@@ -232,7 +241,7 @@ class ExcelParser:
             Список объектов ProductCreate
         """
         try:
-            workbook = load_workbook(file_path, data_only=False)
+            workbook = load_workbook(file_path, data_only=True)
             worksheet = workbook.active
 
             if not self._find_columns(worksheet):
@@ -425,18 +434,41 @@ class ExcelParser:
         или произошла ошибка при загрузке.
         """
         try:
-            col_num = self.column_mapping.get('image')
-            if not col_num:
-                return None
+            # Карту изображений строим один раз на лист, а не на каждую строку
+            if self._image_ws is not worksheet:
+                self._image_ws = worksheet
+                self._image_map = self._build_image_map(worksheet)
+                self._claimed_images = set()
 
-            images = self._get_images_from_worksheet(worksheet)
-            cell_coordinate = self._get_cell_coordinate(col_num, row_num)
+            candidates = list(self._image_map.get(row_num, []))
 
-            for image_info in images:
-                if self._is_image_in_cell(image_info, cell_coordinate, row_num):
-                    # Грузим каждое найденное изображение в Supabase Storage.
-                    # Используем отдельную папку, чтобы различать импорт из Excel.
-                    return self._upload_image_to_storage(image_info["image"], folder="excel-import")
+            # Fallback на соседние строки — но только если соседняя строка
+            # сама не является товаром, иначе мы заберём её картинку.
+            if not candidates:
+                for neighbor in (row_num - 1, row_num + 1):
+                    if neighbor < 2:
+                        continue
+                    if self._get_cell_value(worksheet, neighbor, "name"):
+                        continue
+                    candidates.extend(self._image_map.get(neighbor, []))
+
+            candidates = [
+                c for c in candidates if id(c["image"]) not in self._claimed_images
+            ]
+
+            # Если колонка изображений известна, предпочитаем картинки из неё
+            img_col = self.column_mapping.get("image")
+            if img_col:
+                in_column = [c for c in candidates if abs(c["col"] - img_col) <= 1]
+                if in_column:
+                    candidates = in_column
+
+            for entry in candidates:
+                # Используем отдельную папку, чтобы различать импорт из Excel.
+                url = self._upload_image_to_storage(entry["image"], folder="excel-import")
+                if url:
+                    self._claimed_images.add(id(entry["image"]))
+                    return url
 
             return None
 
@@ -444,35 +476,53 @@ class ExcelParser:
             print(f"[WARNING] Ошибка обработки изображения в строке {row_num}: {str(e)}")
             return None
 
-    def _get_images_from_worksheet(self, worksheet) -> List[Dict]:
-        """Получает все изображения с их позициями"""
-        images = []
+    def _build_image_map(self, worksheet) -> Dict[int, List[Dict[str, Any]]]:
+        """
+        Строит отображение «строка Excel (1-индексная) -> изображения».
+
+        Якоря openpyxl 0-индексные, поэтому +1. Строку определяем по центру
+        картинки (учитывая rowOff и нижний угол twoCellAnchor): верхний угол
+        часто «залезает» в строку выше, и по нему одному строка определяется
+        неверно.
+        """
+        image_map: Dict[int, List[Dict[str, Any]]] = {}
+
         for image in worksheet._images:
-            if isinstance(image, OpenpyxlImage):
-                images.append({
-                    'image': image,
-                    'anchor': image.anchor
-                })
-        return images
+            if not isinstance(image, OpenpyxlImage):
+                continue
 
-    def _get_cell_coordinate(self, col_num: int, row_num: int) -> str:
-        """Преобразует номера колонки и строки в координаты Excel"""
-        col_letter = chr(64 + col_num)
-        return f"{col_letter}{row_num}"
+            anchor = getattr(image, "anchor", None)
+            frm = getattr(anchor, "_from", None)
+            if frm is None:
+                # AbsoluteAnchor не привязан к ячейке — сопоставить со строкой нельзя
+                print("[WARNING] Изображение с абсолютным якорем пропущено")
+                continue
 
-    def _is_image_in_cell(self, image_info: Dict, cell_coordinate: str, row_num: int) -> bool:
-        """Проверяет находится ли изображение в указанной ячейке или строке"""
-        try:
-            anchor = image_info['anchor']
-            if hasattr(anchor, '_from'):
-                image_row = anchor._from.row
-                image_col = anchor._from.col
+            pos_from = frm.row + self._row_offset_ratio(worksheet, frm)
+            to = getattr(anchor, "to", None)
+            if to is not None:
+                pos_to = to.row + self._row_offset_ratio(worksheet, to)
+                center = (pos_from + pos_to) / 2
+            else:
+                # OneCellAnchor: считаем, что картинка занимает примерно одну строку
+                center = pos_from + 0.5
 
-                return image_row == row_num or abs(image_row - row_num) <= 1
+            excel_row = int(center) + 1
+            image_map.setdefault(excel_row, []).append({
+                "image": image,
+                "col": frm.col + 1,
+            })
 
-        except Exception:
-            pass
-        return False
+        return image_map
+
+    def _row_offset_ratio(self, worksheet, marker) -> float:
+        """Доля строки, на которую смещён якорь (rowOff в EMU / высота строки)."""
+        dim = worksheet.row_dimensions.get(marker.row + 1)
+        height_pt = dim.height if dim is not None and dim.height else None
+        if not height_pt:
+            height_pt = worksheet.sheet_format.defaultRowHeight or 15.0
+        height_emu = float(height_pt) * 12700  # 1 pt = 12700 EMU
+        return min(marker.rowOff / height_emu, 1.0) if height_emu else 0.0
 
     def _upload_image_to_storage(
         self,
@@ -491,7 +541,6 @@ class ExcelParser:
         Returns:
             Публичный URL загруженного файла или None в случае ошибки.
         """
-        temp_file_path = None
         try:
             # В openpyxl сами байты изображения лежат во внутреннем объекте `_data()`,
             # а `ref` / `anchor` относятся к позиционированию на листе.
@@ -511,29 +560,31 @@ class ExcelParser:
                 else:
                     raise ValueError("Неподдерживаемый формат данных изображения из openpyxl")
 
-            with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as temp_file:
-                temp_file_path = temp_file.name
+            # Повторяющиеся картинки (один товар в нескольких строках) грузим один раз
+            content_hash = hashlib.md5(image_bytes_raw).hexdigest()
+            if content_hash in self._uploaded_by_hash:
+                return self._uploaded_by_hash[content_hash]
 
-                pil_image = Image.open(io.BytesIO(image_bytes_raw))
-                pil_image.save(temp_file_path, 'PNG')
+            pil_image = Image.open(io.BytesIO(image_bytes_raw))
+            if pil_image.mode not in ("RGB", "RGBA", "L", "P"):
+                # PNG не поддерживает, например, CMYK
+                pil_image = pil_image.convert("RGB")
 
-            with open(temp_file_path, 'rb') as f:
-                image_bytes = f.read()
+            buffer = io.BytesIO()
+            pil_image.save(buffer, "PNG")
 
-            filename = f"product_{hash(image_bytes_raw)}.png"
             # `image_service` — это обёртка над Supabase Storage (см. ImageKitService),
             # здесь мы просто передаём байты и путь для загрузки.
-            return image_service.upload_image(image_bytes, filename, folder=folder)
+            url = image_service.upload_image(
+                buffer.getvalue(), f"product_{content_hash}.png", folder=folder
+            )
+            if url:
+                self._uploaded_by_hash[content_hash] = url
+            return url
 
         except Exception as e:
             print(f"[ERROR] Ошибка загрузки изображения в Supabase Storage: {str(e)}")
             return None
-        finally:
-            if temp_file_path and os.path.exists(temp_file_path):
-                try:
-                    os.unlink(temp_file_path)
-                except:
-                    pass
 
     async def parse_and_create_products(self, file_path: str) -> Dict[str, Any]:
         """
