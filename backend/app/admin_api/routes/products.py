@@ -8,6 +8,7 @@ from ..auth import verify_admin_token
 from ...config import settings
 from ...services.image_service import image_service
 from ...services.product_service import ProductService
+from ...services.attrs_extractor import AttrsExtractor, DEVICE_TYPE_TO_CATEGORY
 from ...models.product import Product, ProductCreate, ProductUpdate
 
 router = APIRouter()
@@ -80,6 +81,35 @@ async def upload_product_image(
         raise HTTPException(status_code=500, detail="Не удалось загрузить изображение")
 
     return {"image_url": image_url}
+
+
+@router.post("/products/{product_id}/enrich", response_model=Product)
+async def enrich_product(
+    product_id: str,
+    admin: str = Depends(verify_admin_token)
+):
+    """Переизвлечь структурированные атрибуты товара через AI"""
+
+    product_service = ProductService()
+    product = await product_service.get_product(product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Товар не найден")
+
+    extractor = AttrsExtractor()
+    if not extractor.available:
+        raise HTTPException(status_code=503, detail="CLAUDE_API_KEY не настроен")
+
+    attrs = await extractor.extract(product.name, product.description)
+    if attrs is None:
+        raise HTTPException(status_code=502, detail="Не удалось извлечь атрибуты")
+
+    update = ProductUpdate(attrs=attrs)
+    category = DEVICE_TYPE_TO_CATEGORY.get(attrs.device_type or "")
+    if category:
+        update.category = category
+
+    await product_service.update_product(product_id, update)
+    return await product_service.get_product(product_id)
 
 
 @router.get("/products/{product_id}", response_model=Product)

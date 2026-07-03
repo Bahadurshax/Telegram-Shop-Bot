@@ -4,12 +4,21 @@ from datetime import datetime, timezone
 from typing import Optional, List
 from bson import ObjectId
 
+def _compact_attrs(product_dict: dict) -> dict:
+  """Убирает None-поля из attrs перед записью в MongoDB"""
+  attrs = product_dict.get("attrs")
+  if isinstance(attrs, dict):
+    compacted = {k: v for k, v in attrs.items() if v is not None}
+    product_dict["attrs"] = compacted or None
+  return product_dict
+
+
 class ProductRepository:
   def __init__(self):
     self.collection = get_products_collection()
-  
+
   async def create_product(self, product_data: ProductCreate) -> Product:
-    product_dict = product_data.model_dump()
+    product_dict = _compact_attrs(product_data.model_dump())
 
     product_dict["created_at"] = datetime.now(timezone.utc)
     product_dict["updated_at"] = datetime.now(timezone.utc)
@@ -67,7 +76,7 @@ class ProductRepository:
   async def update_product(self, product_id: str, update_data: ProductUpdate) -> bool:
     try:
       update_dict = {
-        k: v for k,v in update_data.model_dump().items() if v is not None
+        k: v for k, v in _compact_attrs(update_data.model_dump()).items() if v is not None
       }
 
       if not update_dict:
@@ -121,7 +130,7 @@ class ProductRepository:
       now = datetime.now(timezone.utc)
 
       for product_data in products_data:
-        product_dict = product_data.model_dump()
+        product_dict = _compact_attrs(product_data.model_dump())
         product_dict["created_at"] = now
         product_dict["updated_at"] = now
         products_dict.append(product_dict)

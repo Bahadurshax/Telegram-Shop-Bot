@@ -114,27 +114,47 @@ def get_consultant_start_keyboard() -> InlineKeyboardMarkup:
 
 
 def get_consultant_location_keyboard() -> InlineKeyboardMarkup:
-    """Клавиатура выбора места установки"""
+    """Клавиатура выбора типа объекта"""
     keyboard = InlineKeyboardBuilder()
-    
+
     keyboard.row(
         InlineKeyboardButton(text=BUTTON_HOME, callback_data="location_home"),
         InlineKeyboardButton(text=BUTTON_OFFICE, callback_data="location_office")
     )
     keyboard.row(
-        InlineKeyboardButton(text=BUTTON_ORGANIZATION, callback_data="location_organization")
+        InlineKeyboardButton(text=BUTTON_SHOP, callback_data="location_shop"),
+        InlineKeyboardButton(text=BUTTON_WAREHOUSE, callback_data="location_warehouse")
     )
     keyboard.row(
         InlineKeyboardButton(text=BUTTON_MAIN_MENU, callback_data="main_menu")
     )
-    
+
+    return keyboard.as_markup()
+
+
+def get_consultant_purpose_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура выбора цели наблюдения"""
+    keyboard = InlineKeyboardBuilder()
+
+    keyboard.row(
+        InlineKeyboardButton(text=BUTTON_PURPOSE_THEFT, callback_data="purpose_theft"),
+        InlineKeyboardButton(text=BUTTON_PURPOSE_STAFF, callback_data="purpose_staff")
+    )
+    keyboard.row(
+        InlineKeyboardButton(text=BUTTON_PURPOSE_IDENTIFY, callback_data="purpose_identify"),
+        InlineKeyboardButton(text=BUTTON_PURPOSE_GENERAL, callback_data="purpose_general")
+    )
+    keyboard.row(
+        InlineKeyboardButton(text=BUTTON_MAIN_MENU, callback_data="main_menu")
+    )
+
     return keyboard.as_markup()
 
 
 def get_consultant_cameras_count_keyboard() -> InlineKeyboardMarkup:
     """Клавиатура выбора количества камер"""
     keyboard = InlineKeyboardBuilder()
-    
+
     keyboard.row(
         InlineKeyboardButton(text=BUTTON_CAMERAS_1_4, callback_data="cameras_1_4"),
         InlineKeyboardButton(text=BUTTON_CAMERAS_5_8, callback_data="cameras_5_8")
@@ -146,14 +166,51 @@ def get_consultant_cameras_count_keyboard() -> InlineKeyboardMarkup:
     keyboard.row(
         InlineKeyboardButton(text=BUTTON_MAIN_MENU, callback_data="main_menu")
     )
-    
+
+    return keyboard.as_markup()
+
+
+def get_consultant_placement_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура размещения камер (внутри/улица)"""
+    keyboard = InlineKeyboardBuilder()
+
+    keyboard.row(
+        InlineKeyboardButton(text=BUTTON_PLACEMENT_INDOOR, callback_data="placement_indoor"),
+        InlineKeyboardButton(text=BUTTON_PLACEMENT_OUTDOOR, callback_data="placement_outdoor")
+    )
+    keyboard.row(
+        InlineKeyboardButton(text=BUTTON_PLACEMENT_BOTH, callback_data="placement_both")
+    )
+    keyboard.row(
+        InlineKeyboardButton(text=BUTTON_MAIN_MENU, callback_data="main_menu")
+    )
+
+    return keyboard.as_markup()
+
+
+def get_consultant_retention_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура глубины архива"""
+    keyboard = InlineKeyboardBuilder()
+
+    keyboard.row(
+        InlineKeyboardButton(text=BUTTON_RETENTION_7D, callback_data="retention_7d"),
+        InlineKeyboardButton(text=BUTTON_RETENTION_14D, callback_data="retention_14d")
+    )
+    keyboard.row(
+        InlineKeyboardButton(text=BUTTON_RETENTION_30D, callback_data="retention_30d"),
+        InlineKeyboardButton(text=BUTTON_RETENTION_60D, callback_data="retention_60d")
+    )
+    keyboard.row(
+        InlineKeyboardButton(text=BUTTON_MAIN_MENU, callback_data="main_menu")
+    )
+
     return keyboard.as_markup()
 
 
 def get_consultant_yes_no_keyboard() -> InlineKeyboardMarkup:
     """Клавиатура Да/Нет"""
     keyboard = InlineKeyboardBuilder()
-    
+
     keyboard.row(
         InlineKeyboardButton(text=BUTTON_YES, callback_data="answer_yes"),
         InlineKeyboardButton(text=BUTTON_NO, callback_data="answer_no")
@@ -161,7 +218,7 @@ def get_consultant_yes_no_keyboard() -> InlineKeyboardMarkup:
     keyboard.row(
         InlineKeyboardButton(text=BUTTON_MAIN_MENU, callback_data="main_menu")
     )
-    
+
     return keyboard.as_markup()
 
 

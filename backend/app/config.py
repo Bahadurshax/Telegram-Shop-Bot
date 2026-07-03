@@ -17,7 +17,10 @@ class Settings(BaseSettings):
     
     # Claude AI
     CLAUDE_API_KEY: str = os.getenv("CLAUDE_API_KEY", "")
-    CLAUDE_MODEL: str = os.getenv("CLAUDE_MODEL", "claude-3-haiku-20240307")
+    # Модель консультанта (claude-3-haiku-20240307 выведена из эксплуатации)
+    CLAUDE_MODEL: str = os.getenv("CLAUDE_MODEL", "claude-opus-4-8")
+    # Модель извлечения атрибутов товаров из прайса (дешёвая, задача механическая)
+    CLAUDE_ATTRS_MODEL: str = os.getenv("CLAUDE_ATTRS_MODEL", "claude-haiku-4-5")
     
     # Admin API
     ADMIN_API_HOST: str = os.getenv("ADMIN_API_HOST", "127.0.0.1")

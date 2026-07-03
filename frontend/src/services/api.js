@@ -139,6 +139,12 @@ class ApiService {
     return this.upload('/products/upload-image', formData)
   }
 
+  async enrichProduct(id) {
+    return this.request(`/products/${id}/enrich`, {
+      method: 'POST'
+    })
+  }
+
   // Orders
   async getOrders(params = {}) {
     const queryString = new URLSearchParams(params).toString()

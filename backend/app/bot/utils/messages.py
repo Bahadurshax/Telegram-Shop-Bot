@@ -55,66 +55,71 @@ PRODUCT_TEMPLATE = """
 CONSULTANT_START = """
 🤖 <b>AI Консультант по видеонаблюдению</b>
 
-Я помогу подобрать оптимальное решение для ваших потребностей.
+Я помогу спроектировать систему под ваши задачи: подберу камеры по зонам,
+рассчитаю объём архива и предложу товары из нашего каталога.
 
-Ответьте на несколько вопросов, и я порекомендую подходящие товары.
-
-Готовы начать? 👇
+Ответьте на 8 коротких вопросов 👇
 """
 
-CONSULTANT_QUESTION_1 = """
-📍 <b>Вопрос 1/5</b>
+CONSULTANT_QUESTION_LOCATION = """
+📍 <b>Вопрос 1/8</b>
 
-Где вы планируете установить систему видеонаблюдения?
+Что за объект нужно оборудовать видеонаблюдением?
 """
 
-CONSULTANT_QUESTION_2 = """
-🎯 <b>Вопрос 2/5</b>
+CONSULTANT_QUESTION_PURPOSE = """
+🎯 <b>Вопрос 2/8</b>
+
+Зачем вам камеры — что именно хотите увидеть или предотвратить?
+"""
+
+CONSULTANT_QUESTION_CAMERAS = """
+🎥 <b>Вопрос 3/8</b>
 
 Сколько камер вам потребуется?
 """
 
-CONSULTANT_QUESTION_3 = """
-🎤 <b>Вопрос 3/5</b>
+CONSULTANT_QUESTION_PLACEMENT = """
+🏠 <b>Вопрос 4/8</b>
 
-Нужна ли вам запись звука?
+Камеры нужны внутри помещения, на улице, или и там и там?
 """
 
-CONSULTANT_QUESTION_4 = """
-📏 <b>Вопрос 4/5</b>
+CONSULTANT_QUESTION_DISTANCE = """
+📏 <b>Вопрос 5/8</b>
 
 На какое расстояние должна видеть камера?
 """
 
-CONSULTANT_QUESTION_5 = """
-💰 <b>Вопрос 5/5</b>
+CONSULTANT_QUESTION_RETENTION = """
+💾 <b>Вопрос 6/8</b>
+
+Сколько времени нужно хранить записи?
+"""
+
+CONSULTANT_QUESTION_REMOTE = """
+📱 <b>Вопрос 7/8</b>
+
+Нужен ли удалённый просмотр с телефона?
+"""
+
+CONSULTANT_QUESTION_BUDGET = """
+💰 <b>Вопрос 8/8</b>
 
 Какой бюджет вы планируете на систему видеонаблюдения?
 """
 
 CONSULTANT_PROCESSING = """
-🤖 <b>Анализирую ваши потребности...</b>
+🤖 <b>Проектирую решение...</b>
 
-Подбираю оптимальные решения на основе ваших ответов.
-Это займет несколько секунд.
+Анализирую ответы, рассчитываю архив и подбираю оборудование.
+Это займет до минуты.
 """
 
-CONSULTANT_RESULT_TEMPLATE = """
-✅ <b>Рекомендации готовы!</b>
+CONSULTANT_MANAGER_REQUESTED = """
+📞 <b>Заявка передана менеджеру</b>
 
-<b>📋 Ваши потребности:</b>
-• Место установки: {location}
-• Количество камер: {cameras_count}
-• Запись звука: {audio}
-• Дальность обзора: {distance}
-• Бюджет: {budget}
-
-<b>🎯 Рекомендуемые товары:</b>
-{recommendations}
-
-<b>💰 Итоговая стоимость: {total_price}</b>
-
-Хотите добавить что-то в корзину?
+Мы свяжемся с вами в ближайшее время и подберём оборудование под ваши задачи.
 """
 
 # Корзина
@@ -201,22 +206,37 @@ BUTTON_BACK = "◀️ Назад"
 BUTTON_MAIN_MENU = "🏠 Главное меню"
 
 # Консультант - кнопки
-BUTTON_HOME = "🏠 Дом"
+BUTTON_HOME = "🏠 Дом / квартира"
 BUTTON_OFFICE = "🏢 Офис"
-BUTTON_ORGANIZATION = "🏛 Организация"
+BUTTON_SHOP = "🛒 Магазин"
+BUTTON_WAREHOUSE = "🏭 Склад / производство"
 
 BUTTON_YES = "✅ Да"
 BUTTON_NO = "❌ Нет"
+
+BUTTON_PURPOSE_THEFT = "🚨 Защита от краж"
+BUTTON_PURPOSE_STAFF = "👥 Контроль сотрудников"
+BUTTON_PURPOSE_IDENTIFY = "🔍 Лица / номера авто"
+BUTTON_PURPOSE_GENERAL = "👁 Общий контроль"
 
 BUTTON_CAMERAS_1_4 = "1-4 камеры"
 BUTTON_CAMERAS_5_8 = "5-8 камер"
 BUTTON_CAMERAS_9_16 = "9-16 камер"
 BUTTON_CAMERAS_MORE = "Более 16 камер"
 
+BUTTON_PLACEMENT_INDOOR = "🏠 Внутри"
+BUTTON_PLACEMENT_OUTDOOR = "🌳 На улице"
+BUTTON_PLACEMENT_BOTH = "🏠+🌳 И там, и там"
+
 BUTTON_DISTANCE_10M = "До 10 метров"
 BUTTON_DISTANCE_30M = "До 30 метров"
 BUTTON_DISTANCE_50M = "До 50 метров"
 BUTTON_DISTANCE_100M = "Более 50 метров"
+
+BUTTON_RETENTION_7D = "1 неделя"
+BUTTON_RETENTION_14D = "2 недели"
+BUTTON_RETENTION_30D = "1 месяц"
+BUTTON_RETENTION_60D = "2 месяца"
 
 BUTTON_BUDGET_500K = "До 500 тыс сум"
 BUTTON_BUDGET_1M = "500 тыс - 1 млн"

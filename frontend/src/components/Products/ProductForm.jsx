@@ -6,6 +6,35 @@ import Modal from '../Common/Modal'
 
 const MAX_IMAGE_SIZE_MB = 10
 
+const DEVICE_TYPE_NAMES = {
+    camera_ip: 'IP-камера',
+    camera_analog: 'Аналоговая камера',
+    nvr: 'NVR',
+    dvr: 'DVR',
+    hdd: 'Жёсткий диск',
+    accessory: 'Аксессуар'
+}
+
+// Атрибут -> человекочитаемая метка (для чипов в форме)
+const attrsToChips = (attrs) => {
+    if (!attrs) return []
+    const chips = []
+    if (attrs.device_type) chips.push(DEVICE_TYPE_NAMES[attrs.device_type] || attrs.device_type)
+    if (attrs.resolution_mp) chips.push(`${attrs.resolution_mp} Мп`)
+    if (attrs.outdoor === true) chips.push('Улица')
+    if (attrs.outdoor === false) chips.push('Помещение')
+    if (attrs.ir_range_m) chips.push(`ИК ${attrs.ir_range_m} м`)
+    if (attrs.focal_length_mm) chips.push(`Объектив ${attrs.focal_length_mm} мм`)
+    if (attrs.poe) chips.push('PoE')
+    if (attrs.has_audio) chips.push('Звук')
+    if (attrs.wdr) chips.push('WDR')
+    if (attrs.channels) chips.push(`${attrs.channels} каналов`)
+    if (attrs.poe_ports) chips.push(`${attrs.poe_ports} PoE-портов`)
+    if (attrs.max_hdd_count) chips.push(`До ${attrs.max_hdd_count} HDD`)
+    if (attrs.capacity_tb) chips.push(`${attrs.capacity_tb} ТБ`)
+    return chips
+}
+
 const ProductForm = ({ product, onSubmit, onCancel }) => {
     const [formData, setFormData] = useState({
         name: product?.name || '',
@@ -18,6 +47,25 @@ const ProductForm = ({ product, onSubmit, onCancel }) => {
         image_url: product?.image_url || ''
     })
     const [uploadingImage, setUploadingImage] = useState(false)
+    const [attrs, setAttrs] = useState(product?.attrs || null)
+    const [enriching, setEnriching] = useState(false)
+
+    const handleEnrich = async () => {
+        if (!product?.id) return
+        setEnriching(true)
+        try {
+            const updated = await apiService.enrichProduct(product.id)
+            setAttrs(updated.attrs || null)
+            if (updated.category) {
+                setFormData(prev => ({ ...prev, category: updated.category }))
+            }
+        } catch (error) {
+            console.error('Error enriching product:', error)
+            alert('Не удалось извлечь характеристики')
+        } finally {
+            setEnriching(false)
+        }
+    }
 
     const handleImageSelect = async (e) => {
         const file = e.target.files[0]
@@ -164,6 +212,37 @@ const ProductForm = ({ product, onSubmit, onCancel }) => {
                             ))}
                         </select>
                     </div>
+
+                    {product?.id && (
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                                Характеристики (AI)
+                            </label>
+                            <div className="flex flex-wrap items-center gap-2">
+                                {attrsToChips(attrs).map((chip, i) => (
+                                    <span
+                                        key={i}
+                                        className="px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-700 text-xs text-slate-700 dark:text-slate-300"
+                                    >
+                                        {chip}
+                                    </span>
+                                ))}
+                                {attrsToChips(attrs).length === 0 && (
+                                    <span className="text-xs text-slate-400 dark:text-slate-500">
+                                        Атрибуты не извлечены — консультант будет опираться только на текст описания
+                                    </span>
+                                )}
+                                <button
+                                    type="button"
+                                    onClick={handleEnrich}
+                                    disabled={enriching}
+                                    className="px-3 py-1 rounded-md border border-slate-300 dark:border-slate-700 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-wait"
+                                >
+                                    {enriching ? 'Извлекаем…' : '✨ Переизвлечь'}
+                                </button>
+                            </div>
+                        </div>
+                    )}
 
                     <div>
                         <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Изображение</label>

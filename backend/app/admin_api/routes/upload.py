@@ -10,6 +10,7 @@ from openpyxl import load_workbook
 
 from ..auth import verify_admin_token
 from ...services.product_service import ProductService
+from ...services.attrs_extractor import AttrsExtractor, DEVICE_TYPE_TO_CATEGORY
 from ...models.product import ProductCreate
 from ...config import settings
 from ..utils.excel_parser import ExcelParser
@@ -90,7 +91,27 @@ async def upload_pricelist(
         print(f"[DEBUG] - Количество товаров: {len(products_data)}")
         print(f"[DEBUG] - Статистика: {stats}")
         print(f"[DEBUG] - Ошибки: {errors}")
-        
+
+        # AI-обогащение: извлекаем структурированные атрибуты из названия/описания.
+        # При ошибке или отсутствии API-ключа товары сохраняются без attrs.
+        extractor = AttrsExtractor()
+        enriched_count = 0
+        if extractor.available and products_data:
+            attrs_list = await extractor.extract_many(
+                [(p.get("name", ""), p.get("description", "")) for p in products_data]
+            )
+            for product_data, attrs in zip(products_data, attrs_list):
+                if attrs is None:
+                    continue
+                product_data["attrs"] = attrs
+                # Категорию определяем по извлечённому типу устройства —
+                # это точнее, чем поиск по ключевым словам в парсере
+                category = DEVICE_TYPE_TO_CATEGORY.get(attrs.device_type)
+                if category:
+                    product_data["category"] = category
+                enriched_count += 1
+            print(f"[DEBUG] - Обогащено атрибутами: {enriched_count} из {len(products_data)}")
+
         # Сохраняем товары в базу
         product_service = ProductService()
         created_count = 0
@@ -116,6 +137,7 @@ async def upload_pricelist(
             "stats": {
                 **stats,
                 "created": created_count,
+                "enriched": enriched_count,
                 "save_errors": len(save_errors)
             },
             "errors": errors + save_errors[:10]  # Показываем до 10 ошибок

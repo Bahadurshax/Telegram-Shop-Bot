@@ -1,6 +1,8 @@
 """
 Public API AI-консультации для Telegram Mini App
 """
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
@@ -15,12 +17,20 @@ router = APIRouter()
 
 
 class ConsultationRequest(BaseModel):
-    """Ответы анкеты — коды совпадают с callback-данными бота"""
-    location_type: str  # home / office / organization
-    cameras_count: str  # 1_4 / 5_8 / 9_16 / more
-    need_audio: bool
-    distance: str       # 10m / 30m / 50m / 100m
-    budget: str         # 500k / 1m / 2m / more
+    """Ответы анкеты — коды совпадают с callback-данными бота.
+
+    Новые поля опциональны, чтобы старые клиенты мини-аппа
+    (5-вопросная анкета) продолжали работать.
+    """
+    location_type: str                    # home / office / shop / warehouse / organization
+    cameras_count: str                    # 1_4 / 5_8 / 9_16 / more
+    budget: str                           # 500k / 1m / 2m / more
+    purpose: Optional[str] = None         # theft / staff / identify / general
+    placement: Optional[str] = None       # indoor / outdoor / both
+    distance: Optional[str] = None        # 10m / 30m / 50m / 100m
+    retention: Optional[str] = None       # 7d / 14d / 30d / 60d
+    remote_access: Optional[bool] = None
+    need_audio: Optional[bool] = None     # legacy-поле старой анкеты
 
 
 @router.post("/consultation")
@@ -40,7 +50,7 @@ async def create_consultation(
         last_name=tg_user.get("last_name"),
     )
 
-    consultation_data = payload.model_dump()
+    consultation_data = payload.model_dump(exclude_none=True)
 
     ai_service = AIConsultantService()
     try:
@@ -48,8 +58,6 @@ async def create_consultation(
     except Exception as e:
         logger.error(f"Ошибка генерации рекомендаций: {e}")
         raise HTTPException(status_code=502, detail="Не удалось сгенерировать рекомендации")
-
-    recommendations["product_ids"] = [p.id for p in recommendations["products"]]
 
     await user_service.save_consultation_report(
         tg_user["id"], consultation_data, recommendations
@@ -64,8 +72,19 @@ async def create_consultation(
             logger.warning(f"Не удалось отправить результат в чат {tg_user['id']}: {e}")
 
     return {
-        "products": [p.model_dump() for p in recommendations["products"]],
+        "products": [
+            {
+                **item["product"].model_dump(),
+                "quantity": item["quantity"],
+                "reason": item["reason"],
+            }
+            for item in recommendations.get("items", [])
+        ],
         "explanation": recommendations.get("explanation", ""),
+        "zones": recommendations.get("zones", []),
+        "equipment": recommendations.get("equipment", []),
+        "unmatched": recommendations.get("unmatched", []),
+        "storage": recommendations.get("storage", {}),
         "total_uzs": recommendations.get("total_uzs", 0),
         "total_usd": recommendations.get("total_usd", 0),
         "consultation_summary": recommendations.get("consultation_summary", ""),
@@ -74,35 +93,7 @@ async def create_consultation(
 
 async def _send_result_to_chat(bot, chat_id: int, recommendations: dict):
     """Отправить рекомендации сообщением в чат с кнопками добавления в корзину"""
-    from aiogram.types import InlineKeyboardButton
-    from aiogram.utils.keyboard import InlineKeyboardBuilder
+    from ...bot.utils.consultant_render import build_result_message
 
-    products_text = ""
-    for i, product in enumerate(recommendations["products"], 1):
-        products_text += f"{i}. {product.name}\n"
-        products_text += f"   💰 {product.price_uzs:,.0f} сум ({product.price_usd:.0f} $)\n\n"
-
-    text = (
-        "🤖 <b>Результаты консультации</b>\n\n"
-        f"{recommendations.get('consultation_summary', '')}\n\n"
-        f"<b>Рекомендуемые товары:</b>\n{products_text}"
-        f"💰 <b>Итого:</b> {recommendations.get('total_uzs', 0):,.0f} сум "
-        f"({recommendations.get('total_usd', 0):.0f} $)"
-    )
-    if recommendations.get("explanation"):
-        text += f"\n\n💡 <b>Пояснение:</b>\n{recommendations['explanation']}"
-
-    keyboard = InlineKeyboardBuilder()
-    for product in recommendations["products"]:
-        keyboard.row(
-            InlineKeyboardButton(
-                text=f"➕ {product.name[:25]}...",
-                callback_data=f"add_to_cart_{product.id}",
-            )
-        )
-    keyboard.row(
-        InlineKeyboardButton(text="🛒 Корзина", callback_data="cart"),
-        InlineKeyboardButton(text="🏠 Меню", callback_data="main_menu"),
-    )
-
-    await bot.send_message(chat_id, text, reply_markup=keyboard.as_markup())
+    text, keyboard = build_result_message(recommendations)
+    await bot.send_message(chat_id, text, reply_markup=keyboard)
