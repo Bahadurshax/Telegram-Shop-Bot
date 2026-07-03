@@ -1,6 +1,9 @@
 """
 Обработчики AI-консультанта: анкета из 8 вопросов и свободный диалог
 """
+import asyncio
+import re
+
 from aiogram import Router, F
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
@@ -35,7 +38,6 @@ from ..utils.messages import (
     CONSULTANT_PROCESSING,
     CONSULTANT_MANAGER_REQUESTED,
     CONSULTANT_CHAT_INTRO,
-    CONSULTANT_CHAT_THINKING,
     CONSULTANT_CHAT_ENDED,
 )
 from ...services.ai_consultant import AIConsultantService
@@ -43,6 +45,35 @@ from ...services.consultant_dialog import ConsultantDialogService, build_dialog_
 from ...services.user_service import UserService
 
 router = Router()
+
+# Минимальный интервал между обновлениями черновика (сек), чтобы не упереться
+# в лимиты Telegram, но при этом сохранить эффект «живой печати».
+_DRAFT_THROTTLE = 0.6
+# Тег незакрытого HTML-хвоста в конце обрезанного черновика
+_UNCLOSED_TAG_RE = re.compile(r"<[^>]*$")
+_HTML_TAG_RE = re.compile(r"<[^>]+>")
+
+
+def _plain_for_draft(text: str) -> str:
+    """Черновик показываем как обычный текст: убираем HTML-теги, чтобы
+    незакрытый на середине генерации тег (<b без </b>) не ломал показ."""
+    text = _HTML_TAG_RE.sub("", text)
+    text = _UNCLOSED_TAG_RE.sub("", text)
+    return text[:4096]
+
+
+async def _send_draft(bot, chat_id: int, draft_id: int, text: str) -> None:
+    """Обновить черновик-«печатает». Ошибки глушим: если стриминг черновиков
+    недоступен, клиент всё равно получит финальное сообщение."""
+    try:
+        await bot.send_message_draft(
+            chat_id=chat_id,
+            draft_id=draft_id,
+            text=_plain_for_draft(text),
+            parse_mode=None,
+        )
+    except Exception:
+        pass
 
 
 async def _save_answer(state: FSMContext, key: str, value):
@@ -229,18 +260,46 @@ async def start_dialog(callback: CallbackQuery, state: FSMContext):
 
 @router.message(ConsultantStates.chatting, F.text, ~F.text.startswith("/"))
 async def process_dialog_message(message: Message, state: FSMContext):
-    """Сообщение клиента в режиме диалога с ИИ"""
-    placeholder = await message.answer(CONSULTANT_CHAT_THINKING)
+    """Сообщение клиента в режиме диалога с ИИ.
+
+    Ответ стримится черновиком (send_message_draft) — клиент видит, как
+    консультант «печатает» вживую, а затем приходит финальное сообщение.
+    """
+    bot = message.bot
+    chat_id = message.chat.id
+    # draft_id должен быть ненулевым; message_id входящего сообщения уникален
+    draft_id = message.message_id or 1
+
+    # Пустой черновик сразу показывает нативное «Печатает…»
+    await _send_draft(bot, chat_id, draft_id, "")
 
     dialog_service = ConsultantDialogService()
-    answer = await dialog_service.respond(message.from_user.id, message.text)
 
+    final_answer = None
+    last_sent = 0.0
+    last_text = ""
+    loop = asyncio.get_running_loop()
+
+    async for is_final, text in dialog_service.respond_stream(message.from_user.id, message.text):
+        if is_final:
+            final_answer = text
+            break
+        now = loop.time()
+        if text and text != last_text and (now - last_sent) >= _DRAFT_THROTTLE:
+            await _send_draft(bot, chat_id, draft_id, text)
+            last_sent = now
+            last_text = text
+
+    if not final_answer:
+        final_answer = "Не смог сформулировать ответ, попробуйте спросить иначе."
+
+    # Финальное сообщение (HTML по умолчанию) — оно замещает черновик
     try:
-        await placeholder.edit_text(answer, reply_markup=get_consultant_chat_keyboard())
+        await message.answer(final_answer, reply_markup=get_consultant_chat_keyboard())
     except TelegramBadRequest:
         # Ответ сломал HTML-разметку — отправляем без форматирования
-        await placeholder.edit_text(
-            answer, parse_mode=None, reply_markup=get_consultant_chat_keyboard()
+        await message.answer(
+            final_answer, parse_mode=None, reply_markup=get_consultant_chat_keyboard()
         )
 
 

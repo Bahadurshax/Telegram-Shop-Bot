@@ -11,7 +11,7 @@
 - объём архива считается только инструментом calc_storage (детерминированно).
 """
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
 
 from anthropic import AsyncAnthropic
 
@@ -42,9 +42,23 @@ _MAX_TOOL_ROUNDS = 5
 
 DIALOG_MODE_PROMPT = """
 РЕЖИМ ДИАЛОГА:
-Ты общаешься с клиентом в чате Telegram после выдачи решения по анкете
-(анкета и решение — в контексте ниже). Правила:
-- Отвечай кратко и по делу: 2-6 предложений, без длинных перечислений.
+Ты — живой консультант магазина, который переписывается с клиентом в Telegram
+после того, как выдал ему решение по анкете (анкета и решение — в контексте ниже).
+
+Твой характер и манера общения:
+- Общайся тепло и по-человечески, как классный продавец-эксперт, который правда
+  хочет помочь, а не как робот-справочник. На «вы», но по-дружески, легко и живо.
+- Разговорная речь: «смотрите», «давайте прикинем», «отличный вопрос»,
+  «честно говоря», «без проблем». Уместен лёгкий юмор и 1-2 эмодзи 🙂, но без перебора.
+- Реагируй на слова клиента по-живому («о, для склада это прям в точку»,
+  «понимаю, бюджет правда штука важная»), а не выдавай сухую справку.
+- Не сыпь терминами. Если без термина никак — тут же поясни простыми словами
+  и через выгоду клиента («сможете разглядеть лицо у входа, а не просто силуэт»).
+- В конце по ситуации мягко подтолкни к следующему шагу: предложи глянуть вариант,
+  задай уточняющий вопрос или предложи помощь менеджера — но ненавязчиво, без давления.
+
+Правила по существу (их нарушать нельзя):
+- Отвечай живо, но без «простыней»: обычно 2-6 предложений.
 - Форматирование: обычный текст, можно выделять <b>жирным</b> и <i>курсивом</i>.
   Никакого Markdown (**, ##, списки с -). Символы < и > используй только
   в тегах <b></b> и <i></i>.
@@ -194,13 +208,23 @@ class ConsultantDialogService:
         self.product_service = ProductService()
         self.user_service = UserService()
 
-    async def respond(self, telegram_user_id: int, user_text: str) -> str:
-        """Ответить на сообщение клиента с учётом контекста и истории"""
+    async def respond_stream(
+        self, telegram_user_id: int, user_text: str
+    ) -> AsyncGenerator[Tuple[bool, str], None]:
+        """Стримовый ответ консультанта.
+
+        Отдаёт кортежи (is_final, text):
+        - (False, partial) — растущий черновик ответа по мере генерации Claude,
+          для показа «печатает…» через send_message_draft (сырой текст модели);
+        - (True, answer) — финальный, санитизированный и уже сохранённый в историю
+          ответ (готовый к отправке обычным сообщением с HTML-разметкой).
+        """
         if not self.client:
-            return (
+            yield True, (
                 "Диалог с ИИ временно недоступен. Напишите ваш вопрос — "
                 "менеджер ответит вам в ближайшее время."
             )
+            return
 
         dialog = await self.user_service.get_consultant_dialog(telegram_user_id) or {}
         context = dialog.get("context") or build_dialog_context(None)
@@ -215,16 +239,20 @@ class ConsultantDialogService:
 
         products = await self.product_service.get_products(is_active=True, limit=200)
 
+        final_text = ""
         try:
-            answer = await self._run_tool_loop(context, messages, products)
+            async for partial in self._run_tool_loop_stream(context, messages, products):
+                final_text = partial
+                yield False, partial
         except Exception as e:
             logger.error(f"Ошибка диалогового консультанта: {e}")
-            return (
+            yield True, (
                 "Не получилось обработать вопрос, попробуйте переформулировать. "
                 "Если вопрос срочный — запросите подбор у менеджера кнопкой ниже."
             )
+            return
 
-        answer = _sanitize_telegram_html(answer)
+        answer = _sanitize_telegram_html(final_text)
         # Страховка от лимита Telegram на длину сообщения (4096)
         if len(answer) > 4000:
             answer = answer[:4000] + "…"
@@ -232,18 +260,35 @@ class ConsultantDialogService:
         await self.user_service.append_consultant_dialog(
             telegram_user_id, user_text, answer, limit=_HISTORY_STORE_LIMIT
         )
+        yield True, answer
+
+    async def respond(self, telegram_user_id: int, user_text: str) -> str:
+        """Ответить на сообщение клиента одним финальным текстом (без стрима).
+
+        Обёртка над respond_stream для мест, которым не нужен стрим.
+        """
+        answer = ""
+        async for is_final, chunk in self.respond_stream(telegram_user_id, user_text):
+            if is_final:
+                answer = chunk
         return answer
 
     # ------------------------------------------------------------------
-    # Цикл tool use
+    # Цикл tool use (стримовый)
     # ------------------------------------------------------------------
 
-    async def _run_tool_loop(
+    async def _run_tool_loop_stream(
         self,
         context: str,
         messages: List[Dict[str, Any]],
         products: List[Product],
-    ) -> str:
+    ) -> AsyncGenerator[str, None]:
+        """Прогоняет циклы tool use, стримя текст финального ответа.
+
+        Yield'ит накопленный текст текущего хода. В ходах с вызовом инструментов
+        модель обычно молчит (её текст, если и есть, — служебная преамбула), а
+        полезный ответ приходит в последнем ходе; его накопление и есть результат.
+        """
         system = [
             {
                 "type": "text",
@@ -256,22 +301,28 @@ class ConsultantDialogService:
         tools = [SEARCH_PRODUCTS_TOOL, CALC_STORAGE_TOOL]
 
         for _ in range(_MAX_TOOL_ROUNDS):
-            response = await self.client.messages.create(
+            round_text = ""
+            async with self.client.messages.stream(
                 model=settings.CLAUDE_MODEL,
                 max_tokens=1200,
                 system=system,
                 tools=tools,
                 messages=messages,
-            )
+            ) as stream:
+                async for delta in stream.text_stream:
+                    round_text += delta
+                    yield round_text
+                final = await stream.get_final_message()
 
-            if response.stop_reason != "tool_use":
-                text = "".join(b.text for b in response.content if b.type == "text").strip()
-                return text or "Не смог сформулировать ответ, попробуйте спросить иначе."
+            if final.stop_reason != "tool_use":
+                text = "".join(b.text for b in final.content if b.type == "text").strip()
+                yield text or "Не смог сформулировать ответ, попробуйте спросить иначе."
+                return
 
             # Выполняем запрошенные инструменты и продолжаем диалог
-            messages.append({"role": "assistant", "content": response.content})
+            messages.append({"role": "assistant", "content": final.content})
             results = []
-            for block in response.content:
+            for block in final.content:
                 if block.type != "tool_use":
                     continue
                 results.append({
@@ -281,7 +332,7 @@ class ConsultantDialogService:
                 })
             messages.append({"role": "user", "content": results})
 
-        return (
+        yield (
             "Вопрос оказался сложнее, чем я могу разобрать в чате. "
             "Запросите подбор у менеджера кнопкой ниже — он поможет."
         )
