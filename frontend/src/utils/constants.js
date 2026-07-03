@@ -2,21 +2,27 @@
 export const CATEGORIES = {
     IP_CAMERAS: 'ip_cameras',
     ANALOG: 'analog',
+    NVR: 'nvr',
     DVR: 'dvr',
+    HDD: 'hdd',
     ACCESSORIES: 'accessories'
 }
 
 export const CATEGORY_NAMES = {
     [CATEGORIES.IP_CAMERAS]: 'IP камеры',
-    [CATEGORIES.ANALOG]: 'Аналоговые',
-    [CATEGORIES.DVR]: 'Регистраторы',
+    [CATEGORIES.ANALOG]: 'Аналоговые камеры',
+    [CATEGORIES.NVR]: 'NVR (IP-регистраторы)',
+    [CATEGORIES.DVR]: 'DVR (аналоговые регистраторы)',
+    [CATEGORIES.HDD]: 'Жёсткие диски',
     [CATEGORIES.ACCESSORIES]: 'Аксессуары'
 }
 
 export const CATEGORY_ICONS = {
     [CATEGORIES.IP_CAMERAS]: 'Cctv',
     [CATEGORIES.ANALOG]: 'Video',
+    [CATEGORIES.NVR]: 'Server',
     [CATEGORIES.DVR]: 'HardDrive',
+    [CATEGORIES.HDD]: 'Database',
     [CATEGORIES.ACCESSORIES]: 'Plug'
 }
 

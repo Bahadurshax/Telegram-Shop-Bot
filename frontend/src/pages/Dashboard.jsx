@@ -18,7 +18,9 @@ import {
   TrendingUp,
   Cctv,
   Video,
+  Server,
   HardDrive,
+  Database,
   Plug,
   LayoutDashboard,
   ChevronRight
@@ -28,7 +30,9 @@ const CategoryIcon = ({ iconName, ...props }) => {
   const icons = {
     Cctv,
     Video,
+    Server,
     HardDrive,
+    Database,
     Plug
   }
   const Icon = icons[iconName] || Package

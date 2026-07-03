@@ -24,7 +24,7 @@ DEVICE_TYPE_TO_CATEGORY = {
     "camera_analog": "analog",
     "nvr": "nvr",
     "dvr": "dvr",
-    "hdd": "accessories",
+    "hdd": "hdd",
     "accessory": "accessories",
 }
 

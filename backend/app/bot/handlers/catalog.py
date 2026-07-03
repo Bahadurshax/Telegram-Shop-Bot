@@ -81,7 +81,7 @@ async def show_catalog(callback: CallbackQuery): # CallbackQuery - объект,
 async def show_category_products(callback: CallbackQuery):
     """Показать товары категории"""
     category = callback.data.split("category_")[1]
-    # category is one of the following: ip_cameras, analog, dvr, accessories, all
+    # category is one of the following: ip_cameras, analog, nvr, dvr, hdd, accessories, all
     await show_products_page(callback, category, 1)
 
 
@@ -142,7 +142,9 @@ async def show_products_page(callback: CallbackQuery, category: str, page: int):
         "all": "Все товары",
         "ip_cameras": "IP камеры",
         "analog": "Аналоговые камеры",
-        "dvr": "Регистраторы",
+        "nvr": "NVR (IP-регистраторы)",
+        "dvr": "DVR (аналоговые регистраторы)",
+        "hdd": "Жёсткие диски",
         "accessories": "Аксессуары"
     }
     

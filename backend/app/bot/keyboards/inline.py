@@ -51,7 +51,11 @@ def get_catalog_keyboard(has_products: bool = True) -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="📹 Аналоговые", callback_data="category_analog")
         )
         keyboard.row(
-            InlineKeyboardButton(text="💾 Регистраторы", callback_data="category_dvr"),
+            InlineKeyboardButton(text="🖥 NVR", callback_data="category_nvr"),
+            InlineKeyboardButton(text="💾 DVR", callback_data="category_dvr")
+        )
+        keyboard.row(
+            InlineKeyboardButton(text="💽 Жёсткие диски", callback_data="category_hdd"),
             InlineKeyboardButton(text="🔌 Аксессуары", callback_data="category_accessories")
         )
         keyboard.row(
