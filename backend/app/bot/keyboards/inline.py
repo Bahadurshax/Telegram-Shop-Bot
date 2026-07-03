@@ -256,7 +256,21 @@ def get_consultant_budget_keyboard() -> InlineKeyboardMarkup:
     keyboard.row(
         InlineKeyboardButton(text=BUTTON_MAIN_MENU, callback_data="main_menu")
     )
-    
+
+    return keyboard.as_markup()
+
+
+def get_consultant_chat_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура под ответами диалогового консультанта"""
+    keyboard = InlineKeyboardBuilder()
+
+    keyboard.row(
+        InlineKeyboardButton(text="📞 Подбор у менеджера", callback_data="consult_manager"),
+    )
+    keyboard.row(
+        InlineKeyboardButton(text="✅ Завершить диалог", callback_data="consult_chat_end"),
+    )
+
     return keyboard.as_markup()
 
 

@@ -12,6 +12,7 @@ class ConsultantStates(StatesGroup):
     waiting_remote = State()
     waiting_budget = State()
     processing = State()
+    chatting = State()  # свободный диалог с ИИ после выдачи решения
 
 
 class OrderStates(StatesGroup):

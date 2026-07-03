@@ -38,6 +38,7 @@ class User(BaseModel):
     cart: List[CartItem] = Field(default_factory=list, description="Корзина")
     consultation_data: ConsultationData = Field(default_factory=ConsultationData)
     consultation_reports: List[Dict[str, Any]] = Field(default_factory=list, description="Отчеты консультаций")
+    consultant_dialog: Optional[Dict[str, Any]] = Field(None, description="Диалог с AI-консультантом (context + messages)")
     consultations_count: int = Field(default=0, description="Количество консультаций")
     last_consultation: Optional[datetime] = Field(None, description="Последняя консультация")
     is_active: bool = Field(default=True)

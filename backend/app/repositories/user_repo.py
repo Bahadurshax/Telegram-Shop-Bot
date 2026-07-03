@@ -167,10 +167,24 @@ class UserRepository:
               "explanation": recommendations.get("explanation", ""),
               "total_uzs": recommendations.get("total_uzs", 0),
               "total_usd": recommendations.get("total_usd", 0),
-              "ai_response": recommendations.get("ai_response", "")
+              "ai_response": recommendations.get("ai_response", ""),
+              # Развёрнутое решение — контекст для диалогового консультанта
+              "zones": recommendations.get("zones", []),
+              "equipment": recommendations.get("equipment", []),
+              "unmatched": recommendations.get("unmatched", []),
+              "storage_summary": (recommendations.get("storage") or {}).get("summary", ""),
+              "items": [
+                  {
+                      "product_id": item["product"].id,
+                      "name": item["product"].name,
+                      "quantity": item.get("quantity", 1),
+                      "reason": item.get("reason", ""),
+                  }
+                  for item in recommendations.get("items", [])
+              ],
           }
       }
-      
+
       result = await self.collection.update_one(
           {"telegram_user_id": telegram_user_id},
           {
@@ -182,5 +196,57 @@ class UserRepository:
               }
           }
       )
-      
+
+      return result.modified_count > 0
+
+  # ------------------------------------------------------------------
+  # Диалог с AI-консультантом (этап 2)
+  # ------------------------------------------------------------------
+
+  async def get_consultant_dialog(self, telegram_user_id: int) -> dict:
+      """Получить текущий диалог с консультантом (context + messages)"""
+      doc = await self.collection.find_one(
+          {"telegram_user_id": telegram_user_id},
+          {"consultant_dialog": 1},
+      )
+      return (doc or {}).get("consultant_dialog") or {}
+
+  async def start_consultant_dialog(self, telegram_user_id: int, context: str) -> bool:
+      """Начать новый диалог: сохранить контекст, очистить историю"""
+      result = await self.collection.update_one(
+          {"telegram_user_id": telegram_user_id},
+          {"$set": {
+              "consultant_dialog": {
+                  "context": context,
+                  "messages": [],
+                  "started_at": datetime.now(timezone.utc),
+              },
+              "updated_at": datetime.now(timezone.utc),
+          }}
+      )
+      return result.matched_count > 0
+
+  async def append_consultant_dialog(
+      self,
+      telegram_user_id: int,
+      user_text: str,
+      assistant_text: str,
+      limit: int = 30,
+  ) -> bool:
+      """Дописать пару сообщений в историю диалога (с обрезкой до limit)"""
+      result = await self.collection.update_one(
+          {"telegram_user_id": telegram_user_id},
+          {
+              "$push": {
+                  "consultant_dialog.messages": {
+                      "$each": [
+                          {"role": "user", "text": user_text},
+                          {"role": "assistant", "text": assistant_text},
+                      ],
+                      "$slice": -limit,
+                  }
+              },
+              "$set": {"updated_at": datetime.now(timezone.utc)},
+          }
+      )
       return result.modified_count > 0

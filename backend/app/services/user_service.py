@@ -84,3 +84,23 @@ class UserService:
             consultation_data=consultation_data,
             recommendations=recommendations
         )
+
+    async def get_consultant_dialog(self, telegram_user_id: int) -> dict:
+        """Получить текущий диалог с AI-консультантом"""
+        return await self.user_repo.get_consultant_dialog(telegram_user_id)
+
+    async def start_consultant_dialog(self, telegram_user_id: int, context: str) -> bool:
+        """Начать новый диалог с AI-консультантом"""
+        return await self.user_repo.start_consultant_dialog(telegram_user_id, context)
+
+    async def append_consultant_dialog(
+        self,
+        telegram_user_id: int,
+        user_text: str,
+        assistant_text: str,
+        limit: int = 30,
+    ) -> bool:
+        """Дописать пару сообщений в историю диалога"""
+        return await self.user_repo.append_consultant_dialog(
+            telegram_user_id, user_text, assistant_text, limit=limit
+        )

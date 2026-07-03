@@ -1,9 +1,10 @@
 """
-Обработчики AI-консультанта (анкета из 8 вопросов)
+Обработчики AI-консультанта: анкета из 8 вопросов и свободный диалог
 """
 from aiogram import Router, F
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery
+from aiogram.types import CallbackQuery, Message
 
 from ...config import settings
 from ..keyboards.inline import (
@@ -16,6 +17,7 @@ from ..keyboards.inline import (
     get_consultant_retention_keyboard,
     get_consultant_yes_no_keyboard,
     get_consultant_budget_keyboard,
+    get_consultant_chat_keyboard,
     get_main_menu_keyboard,
 )
 from ..states.user_states import ConsultantStates
@@ -32,8 +34,12 @@ from ..utils.messages import (
     CONSULTANT_QUESTION_BUDGET,
     CONSULTANT_PROCESSING,
     CONSULTANT_MANAGER_REQUESTED,
+    CONSULTANT_CHAT_INTRO,
+    CONSULTANT_CHAT_THINKING,
+    CONSULTANT_CHAT_ENDED,
 )
 from ...services.ai_consultant import AIConsultantService
+from ...services.consultant_dialog import ConsultantDialogService, build_dialog_context
 from ...services.user_service import UserService
 
 router = Router()
@@ -195,6 +201,59 @@ async def process_budget_and_generate_recommendations(callback: CallbackQuery, s
         )
 
     await state.clear()
+
+
+@router.callback_query(F.data == "consult_chat")
+async def start_dialog(callback: CallbackQuery, state: FSMContext):
+    """Начать свободный диалог с ИИ по выданному решению"""
+    user_service = UserService()
+
+    # Контекст — последняя консультация клиента (из бота или мини-аппа)
+    reports = []
+    try:
+        db_user = await user_service.get_user(callback.from_user.id)
+        reports = getattr(db_user, "consultation_reports", None) or []
+    except Exception as e:
+        print(f"Не удалось получить отчёты клиента {callback.from_user.id}: {e}")
+
+    context = build_dialog_context(reports[-1] if reports else None)
+    await user_service.start_consultant_dialog(callback.from_user.id, context)
+
+    await state.set_state(ConsultantStates.chatting)
+    await callback.message.answer(
+        CONSULTANT_CHAT_INTRO,
+        reply_markup=get_consultant_chat_keyboard()
+    )
+    await callback.answer()
+
+
+@router.message(ConsultantStates.chatting, F.text, ~F.text.startswith("/"))
+async def process_dialog_message(message: Message, state: FSMContext):
+    """Сообщение клиента в режиме диалога с ИИ"""
+    placeholder = await message.answer(CONSULTANT_CHAT_THINKING)
+
+    dialog_service = ConsultantDialogService()
+    answer = await dialog_service.respond(message.from_user.id, message.text)
+
+    try:
+        await placeholder.edit_text(answer, reply_markup=get_consultant_chat_keyboard())
+    except TelegramBadRequest:
+        # Ответ сломал HTML-разметку — отправляем без форматирования
+        await placeholder.edit_text(
+            answer, parse_mode=None, reply_markup=get_consultant_chat_keyboard()
+        )
+
+
+@router.callback_query(F.data == "consult_chat_end")
+async def end_dialog(callback: CallbackQuery, state: FSMContext):
+    """Завершить диалог с ИИ"""
+    await state.clear()
+
+    await callback.message.answer(
+        CONSULTANT_CHAT_ENDED,
+        reply_markup=get_main_menu_keyboard()
+    )
+    await callback.answer()
 
 
 @router.callback_query(F.data == "consult_manager")

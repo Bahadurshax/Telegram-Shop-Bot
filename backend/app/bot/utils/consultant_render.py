@@ -82,6 +82,10 @@ def build_result_message(recommendations: dict) -> tuple[str, InlineKeyboardMark
             )
         )
 
+    keyboard.row(
+        InlineKeyboardButton(text="💬 Обсудить решение с ИИ", callback_data="consult_chat")
+    )
+
     if unmatched or not items:
         keyboard.row(
             InlineKeyboardButton(text="📞 Запросить подбор у менеджера", callback_data="consult_manager")
